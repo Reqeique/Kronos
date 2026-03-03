@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# testing
+coverage/
+playwright-report/
+test-results/
+
+# next.js
+.next/
+out/
+.turbo/
+docs\launch-playbook.md
+# production
+build/
+
+# misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+next-env.d.ts
+backups/
+
+# debug
+npm-debug.log*
+*.log
+
+# env files
+.env
+.env*.local
+
+# prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# PRD and planning docs
+Kronos_PRD_v1.docx
+Kronos_PRD_v1_1.md
+UPDATES_ON_PRD.md
+prd.txt
+
+prd_full.html
+prd_full.md
+

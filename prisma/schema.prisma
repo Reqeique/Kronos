@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  name             String?
+  passwordHash     String
+  slackWorkspaceId String?
+  slackAccessToken String?
+  slackTeamName    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  agents           Agent[]
+  taskRuns         TaskRun[]
+}
+
+model Agent {
+  id             String    @id @default(uuid())
+  userId         String
+  name           String
+  alias          String
+  agentType      String    @default("CUSTOM")
+  connectionTier String    @default("WEBHOOK")
+  acpServerUrl   String?
+  lastActiveAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskRuns       TaskRun[]
+
+  @@unique([userId, alias])
+  @@index([userId])
+}
+
+model TaskRun {
+  id                  String    @id @default(uuid())
+  userId              String
+  agentId             String
+  taskBody            String
+  status              String    @default("SCHEDULED")
+  schedulingMode      String    @default("AUTONOMOUS")
+  scheduledAt         DateTime
+  dispatchedAt        DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  slackMessageTs      String?
+  slackChannelId      String?
+  webhookToken        String?
+  acpSessionId        String?
+  timeoutMinutes      Int       @default(60)
+  pauseCount          Int       @default(0)
+  totalWaitDuration   Int       @default(0)
+  totalActiveDuration Int       @default(0)
+  failureReason       String?
+  latestAgentMessage  String?
+  completionPath      String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  agent               Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledAt])
+  @@index([slackMessageTs])
+  @@index([acpSessionId])
+  @@index([userId])
+  @@index([agentId])
+}
