@@ -86,3 +86,7 @@ npm run db:studio
 npm run kronos -- --help
 ```
 
+## License
+
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+
