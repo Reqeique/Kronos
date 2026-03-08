@@ -21,7 +21,7 @@ const IGNORED_DIRS = new Set([
 const MAX_RESULTS = 12;
 const CACHE_TTL_MS = 15_000;
 
-let cache: { expiresAt: number; files: string[] } | null = null;
+const cache = new Map<string, { expiresAt: number; files: string[] }>();
 
 function normalizePath(inputPath: string): string {
     return inputPath.replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/\/+/g, "/").trim();
@@ -61,11 +61,28 @@ function buildProjectFileIndex(rootDir: string): string[] {
 
 function getProjectFiles(rootDir: string): string[] {
     const now = Date.now();
-    if (cache && cache.expiresAt > now) return cache.files;
+    const cached = cache.get(rootDir);
+    if (cached && cached.expiresAt > now) return cached.files;
 
     const files = buildProjectFileIndex(rootDir);
-    cache = { files, expiresAt: now + CACHE_TTL_MS };
+    cache.set(rootDir, { files, expiresAt: now + CACHE_TTL_MS });
     return files;
+}
+
+function resolveSuggestionRoot(cwdQuery: string | null): string {
+    const projectRoot = process.cwd();
+    const raw = `${cwdQuery || ""}`.trim();
+    if (!raw) return projectRoot;
+
+    const candidate = path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(projectRoot, raw);
+    if (!fs.existsSync(candidate)) {
+        throw Errors.badRequest("cwd does not exist");
+    }
+    if (!fs.statSync(candidate).isDirectory()) {
+        throw Errors.badRequest("cwd must be a directory");
+    }
+
+    return candidate;
 }
 
 function rankMatches(files: string[], rawQuery: string): string[] {
@@ -96,7 +113,8 @@ export async function GET(req: NextRequest) {
 
         const { searchParams } = new URL(req.url);
         const q = `${searchParams.get("q") || ""}`.trim();
-        const files = getProjectFiles(process.cwd());
+        const rootDir = resolveSuggestionRoot(searchParams.get("cwd"));
+        const files = getProjectFiles(rootDir);
         const suggestions = rankMatches(files, q);
         return successResponse({ suggestions });
     } catch (error) {

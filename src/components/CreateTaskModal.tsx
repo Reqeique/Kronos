@@ -13,7 +13,6 @@ import { Calendar } from "@/components/ui/calendar";
 import {
     Form,
     FormControl,
-    FormDescription,
     FormField,
     FormItem,
     FormLabel,
@@ -50,6 +49,7 @@ import {
     CommandList,
 } from "@/components/ui/command";
 import { SchedulingModeIcon } from "@/components/icons";
+import { getWorkingDirectorySetting } from "@/lib/workingDirSetting";
 
 interface Agent {
     id: string;
@@ -101,7 +101,6 @@ type FormInput = z.input<typeof formSchema>;
 interface CreateTaskModalProps {
     agents: Agent[];
     defaultStart?: Date;
-    defaultEnd?: Date;
     onClose: () => void;
     onCreated: (taskRun: TaskRun) => void;
 }
@@ -127,7 +126,6 @@ const MODE_INFO = {
 export default function CreateTaskModal({
     agents,
     defaultStart,
-    defaultEnd,
     onClose,
     onCreated,
 }: CreateTaskModalProps) {
@@ -138,6 +136,7 @@ export default function CreateTaskModal({
     const [mentionQuery, setMentionQuery] = useState<string>("");
     const [mentionCursorStart, setMentionCursorStart] = useState<number | null>(null);
     const [mentionHighlight, setMentionHighlight] = useState(0);
+    const [workingDir, setWorkingDir] = useState("");
     const taskTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
     const initialDate = defaultStart || new Date();
@@ -197,14 +196,18 @@ export default function CreateTaskModal({
         }
     }
 
-    const selectedAgent = agents.find((a) => a.id === form.watch("agentId"));
+    useEffect(() => {
+        setWorkingDir(getWorkingDirectorySetting());
+    }, []);
 
     useEffect(() => {
         const controller = new AbortController();
         const handle = setTimeout(async () => {
             if (!mentionOpen) return;
             try {
-                const res = await fetch(`/api/files/suggest?q=${encodeURIComponent(mentionQuery)}`, {
+                const params = new URLSearchParams({ q: mentionQuery });
+                if (workingDir.trim()) params.set("cwd", workingDir.trim());
+                const res = await fetch(`/api/files/suggest?${params.toString()}`, {
                     signal: controller.signal,
                 });
                 const data = await res.json();
@@ -220,7 +223,7 @@ export default function CreateTaskModal({
             clearTimeout(handle);
             controller.abort();
         };
-    }, [mentionOpen, mentionQuery]);
+    }, [mentionOpen, mentionQuery, workingDir]);
 
     const extractMentionAtCursor = (value: string, cursor: number | null) => {
         if (cursor == null || cursor < 0) return null;

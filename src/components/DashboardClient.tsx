@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
+import { useRouter } from "next/navigation"
 
 import BlockDetailPanel from "@/components/BlockDetailPanel"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -10,7 +11,6 @@ import type { CalendarTaskEvent, CalView } from "@/components/CalendarView"
 import CreateTaskModal from "@/components/CreateTaskModal"
 import { SectionCards } from "@/components/section-cards"
 import { SiteHeader } from "@/components/site-header"
-import SettingsModal from "@/components/SettingsModal"
 import { TaskRunsTable } from "@/components/task-runs-table"
 import {
   Card,
@@ -173,10 +173,10 @@ export default function DashboardClient({
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>(initialTaskRuns)
   const [view, setView] = useState<CalView>("timeGridWeek")
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [selectedRange, setSelectedRange] = useState<{ start: Date; end: Date } | null>(null)
   const [selectedTaskRunId, setSelectedTaskRunId] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview")
+  const router = useRouter()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -306,7 +306,7 @@ export default function DashboardClient({
         agents={agents}
         user={user}
         onCreateTask={() => setShowCreateModal(true)}
-        onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenSettings={() => router.push("/settings")}
         activeSection={activeSection}
         onNavigateSection={setActiveSection}
         variant="inset"
@@ -402,7 +402,6 @@ export default function DashboardClient({
         <CreateTaskModal
           agents={agents}
           defaultStart={selectedRange?.start}
-          defaultEnd={selectedRange?.end}
           onClose={() => {
             setShowCreateModal(false)
             setSelectedRange(null)
@@ -410,15 +409,6 @@ export default function DashboardClient({
           onCreated={handleTaskCreated}
         />
       ) : null}
-      {showSettingsModal && (
-        <SettingsModal
-          isOpen={showSettingsModal}
-          onClose={() => setShowSettingsModal(false)}
-          onAgentCreated={(newAgent) => {
-            setAgents((prev) => [newAgent, ...prev])
-          }}
-        />
-      )}
     </SidebarProvider>
   )
 }
