@@ -61,6 +61,7 @@ export default async function DashboardPage() {
     failureReason: run.failureReason,
     latestAgentMessage: run.latestAgentMessage,
     completionPath: run.completionPath,
+    cronSchedule: run.cronSchedule ?? null,
     agent: run.agent,
   }))
 

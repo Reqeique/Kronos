@@ -62,6 +62,7 @@ export type TaskRunMinAggregateOutputType = {
   failureReason: string | null
   latestAgentMessage: string | null
   completionPath: string | null
+  cronSchedule: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -88,6 +89,7 @@ export type TaskRunMaxAggregateOutputType = {
   failureReason: string | null
   latestAgentMessage: string | null
   completionPath: string | null
+  cronSchedule: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -114,6 +116,7 @@ export type TaskRunCountAggregateOutputType = {
   failureReason: number
   latestAgentMessage: number
   completionPath: number
+  cronSchedule: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -156,6 +159,7 @@ export type TaskRunMinAggregateInputType = {
   failureReason?: true
   latestAgentMessage?: true
   completionPath?: true
+  cronSchedule?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -182,6 +186,7 @@ export type TaskRunMaxAggregateInputType = {
   failureReason?: true
   latestAgentMessage?: true
   completionPath?: true
+  cronSchedule?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -208,6 +213,7 @@ export type TaskRunCountAggregateInputType = {
   failureReason?: true
   latestAgentMessage?: true
   completionPath?: true
+  cronSchedule?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -321,6 +327,7 @@ export type TaskRunGroupByOutputType = {
   failureReason: string | null
   latestAgentMessage: string | null
   completionPath: string | null
+  cronSchedule: string | null
   createdAt: Date
   updatedAt: Date
   _count: TaskRunCountAggregateOutputType | null
@@ -370,6 +377,7 @@ export type TaskRunWhereInput = {
   failureReason?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   latestAgentMessage?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   completionPath?: Prisma.StringNullableFilter<"TaskRun"> | string | null
+  cronSchedule?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   createdAt?: Prisma.DateTimeFilter<"TaskRun"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"TaskRun"> | Date | string
   agent?: Prisma.XOR<Prisma.AgentScalarRelationFilter, Prisma.AgentWhereInput>
@@ -398,6 +406,7 @@ export type TaskRunOrderByWithRelationInput = {
   failureReason?: Prisma.SortOrderInput | Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrderInput | Prisma.SortOrder
   completionPath?: Prisma.SortOrderInput | Prisma.SortOrder
+  cronSchedule?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   agent?: Prisma.AgentOrderByWithRelationInput
@@ -429,6 +438,7 @@ export type TaskRunWhereUniqueInput = Prisma.AtLeast<{
   failureReason?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   latestAgentMessage?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   completionPath?: Prisma.StringNullableFilter<"TaskRun"> | string | null
+  cronSchedule?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   createdAt?: Prisma.DateTimeFilter<"TaskRun"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"TaskRun"> | Date | string
   agent?: Prisma.XOR<Prisma.AgentScalarRelationFilter, Prisma.AgentWhereInput>
@@ -457,6 +467,7 @@ export type TaskRunOrderByWithAggregationInput = {
   failureReason?: Prisma.SortOrderInput | Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrderInput | Prisma.SortOrder
   completionPath?: Prisma.SortOrderInput | Prisma.SortOrder
+  cronSchedule?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.TaskRunCountOrderByAggregateInput
@@ -491,6 +502,7 @@ export type TaskRunScalarWhereWithAggregatesInput = {
   failureReason?: Prisma.StringNullableWithAggregatesFilter<"TaskRun"> | string | null
   latestAgentMessage?: Prisma.StringNullableWithAggregatesFilter<"TaskRun"> | string | null
   completionPath?: Prisma.StringNullableWithAggregatesFilter<"TaskRun"> | string | null
+  cronSchedule?: Prisma.StringNullableWithAggregatesFilter<"TaskRun"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"TaskRun"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"TaskRun"> | Date | string
 }
@@ -515,6 +527,7 @@ export type TaskRunCreateInput = {
   failureReason?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
+  cronSchedule?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   agent: Prisma.AgentCreateNestedOneWithoutTaskRunsInput
@@ -543,6 +556,7 @@ export type TaskRunUncheckedCreateInput = {
   failureReason?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
+  cronSchedule?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -567,6 +581,7 @@ export type TaskRunUpdateInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   agent?: Prisma.AgentUpdateOneRequiredWithoutTaskRunsNestedInput
@@ -595,6 +610,7 @@ export type TaskRunUncheckedUpdateInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -621,6 +637,7 @@ export type TaskRunCreateManyInput = {
   failureReason?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
+  cronSchedule?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -645,6 +662,7 @@ export type TaskRunUpdateManyMutationInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -671,6 +689,7 @@ export type TaskRunUncheckedUpdateManyInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -707,6 +726,7 @@ export type TaskRunCountOrderByAggregateInput = {
   failureReason?: Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrder
   completionPath?: Prisma.SortOrder
+  cronSchedule?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -740,6 +760,7 @@ export type TaskRunMaxOrderByAggregateInput = {
   failureReason?: Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrder
   completionPath?: Prisma.SortOrder
+  cronSchedule?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -766,6 +787,7 @@ export type TaskRunMinOrderByAggregateInput = {
   failureReason?: Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrder
   completionPath?: Prisma.SortOrder
+  cronSchedule?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -889,6 +911,7 @@ export type TaskRunCreateWithoutUserInput = {
   failureReason?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
+  cronSchedule?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   agent: Prisma.AgentCreateNestedOneWithoutTaskRunsInput
@@ -915,6 +938,7 @@ export type TaskRunUncheckedCreateWithoutUserInput = {
   failureReason?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
+  cronSchedule?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -969,6 +993,7 @@ export type TaskRunScalarWhereInput = {
   failureReason?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   latestAgentMessage?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   completionPath?: Prisma.StringNullableFilter<"TaskRun"> | string | null
+  cronSchedule?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   createdAt?: Prisma.DateTimeFilter<"TaskRun"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"TaskRun"> | Date | string
 }
@@ -993,6 +1018,7 @@ export type TaskRunCreateWithoutAgentInput = {
   failureReason?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
+  cronSchedule?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   user: Prisma.UserCreateNestedOneWithoutTaskRunsInput
@@ -1019,6 +1045,7 @@ export type TaskRunUncheckedCreateWithoutAgentInput = {
   failureReason?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
+  cronSchedule?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1069,6 +1096,7 @@ export type TaskRunCreateManyUserInput = {
   failureReason?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
+  cronSchedule?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1093,6 +1121,7 @@ export type TaskRunUpdateWithoutUserInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   agent?: Prisma.AgentUpdateOneRequiredWithoutTaskRunsNestedInput
@@ -1119,6 +1148,7 @@ export type TaskRunUncheckedUpdateWithoutUserInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1144,6 +1174,7 @@ export type TaskRunUncheckedUpdateManyWithoutUserInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1169,6 +1200,7 @@ export type TaskRunCreateManyAgentInput = {
   failureReason?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
+  cronSchedule?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1193,6 +1225,7 @@ export type TaskRunUpdateWithoutAgentInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   user?: Prisma.UserUpdateOneRequiredWithoutTaskRunsNestedInput
@@ -1219,6 +1252,7 @@ export type TaskRunUncheckedUpdateWithoutAgentInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1244,6 +1278,7 @@ export type TaskRunUncheckedUpdateManyWithoutAgentInput = {
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1272,6 +1307,7 @@ export type TaskRunSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   failureReason?: boolean
   latestAgentMessage?: boolean
   completionPath?: boolean
+  cronSchedule?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   agent?: boolean | Prisma.AgentDefaultArgs<ExtArgs>
@@ -1300,6 +1336,7 @@ export type TaskRunSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
   failureReason?: boolean
   latestAgentMessage?: boolean
   completionPath?: boolean
+  cronSchedule?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   agent?: boolean | Prisma.AgentDefaultArgs<ExtArgs>
@@ -1328,6 +1365,7 @@ export type TaskRunSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
   failureReason?: boolean
   latestAgentMessage?: boolean
   completionPath?: boolean
+  cronSchedule?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   agent?: boolean | Prisma.AgentDefaultArgs<ExtArgs>
@@ -1356,11 +1394,12 @@ export type TaskRunSelectScalar = {
   failureReason?: boolean
   latestAgentMessage?: boolean
   completionPath?: boolean
+  cronSchedule?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type TaskRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "agentId" | "taskBody" | "status" | "schedulingMode" | "scheduledAt" | "dispatchedAt" | "startedAt" | "completedAt" | "slackMessageTs" | "slackChannelId" | "webhookToken" | "acpSessionId" | "timeoutMinutes" | "pauseCount" | "totalWaitDuration" | "totalActiveDuration" | "failureReason" | "latestAgentMessage" | "completionPath" | "createdAt" | "updatedAt", ExtArgs["result"]["taskRun"]>
+export type TaskRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "agentId" | "taskBody" | "status" | "schedulingMode" | "scheduledAt" | "dispatchedAt" | "startedAt" | "completedAt" | "slackMessageTs" | "slackChannelId" | "webhookToken" | "acpSessionId" | "timeoutMinutes" | "pauseCount" | "totalWaitDuration" | "totalActiveDuration" | "failureReason" | "latestAgentMessage" | "completionPath" | "cronSchedule" | "createdAt" | "updatedAt", ExtArgs["result"]["taskRun"]>
 export type TaskRunInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   agent?: boolean | Prisma.AgentDefaultArgs<ExtArgs>
   user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
@@ -1402,6 +1441,7 @@ export type $TaskRunPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     failureReason: string | null
     latestAgentMessage: string | null
     completionPath: string | null
+    cronSchedule: string | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["taskRun"]>
@@ -1850,6 +1890,7 @@ export interface TaskRunFieldRefs {
   readonly failureReason: Prisma.FieldRef<"TaskRun", 'String'>
   readonly latestAgentMessage: Prisma.FieldRef<"TaskRun", 'String'>
   readonly completionPath: Prisma.FieldRef<"TaskRun", 'String'>
+  readonly cronSchedule: Prisma.FieldRef<"TaskRun", 'String'>
   readonly createdAt: Prisma.FieldRef<"TaskRun", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"TaskRun", 'DateTime'>
 }

@@ -56,6 +56,7 @@ interface TaskRun {
   failureReason: string | null
   latestAgentMessage: string | null
   completionPath: string | null
+  cronSchedule: string | null
   agent?: { alias: string; name: string }
 }
 
@@ -82,6 +83,52 @@ function taskRunToEvent(run: TaskRun): CalendarTaskEvent {
     alias,
     mode: run.schedulingMode,
   }
+}
+
+/**
+ * Expand a recurring task into virtual calendar events within a window.
+ * Uses a simple cron-compatible calculation for common patterns.
+ */
+function expandRecurringEvents(run: TaskRun, windowEnd: Date): CalendarTaskEvent[] {
+  if (!run.cronSchedule) return [taskRunToEvent(run)]
+
+  const events: CalendarTaskEvent[] = [taskRunToEvent(run)]
+  const alias = run.agent?.alias ?? "unknown"
+  const title = run.taskBody.slice(0, 60) + (run.taskBody.length > 60 ? "..." : "")
+  const durationMs = run.timeoutMinutes * 60000
+
+  // Parse simple cron patterns: "min hour * * *" (daily) and "min hour * * dow" (weekly)
+  const parts = run.cronSchedule.trim().split(/\s+/)
+  if (parts.length !== 5) return events
+
+  const [min, hour, , , dow] = parts
+  const isWeekly = dow !== "*"
+
+  const current = new Date(run.scheduledAt)
+  // Advance to next occurrence from the base, generate up to windowEnd
+  for (let i = 0; i < 365; i++) {
+    // Advance by 1 day for daily, 7 days for weekly
+    current.setDate(current.getDate() + (isWeekly ? 7 : 1))
+    if (current > windowEnd) break
+
+    // Apply hour/min from cron
+    current.setHours(parseInt(hour, 10), parseInt(min, 10), 0, 0)
+
+    const start = current.toISOString()
+    const end = new Date(current.getTime() + durationMs).toISOString()
+
+    events.push({
+      id: `${run.id}-recurring-${i}`,
+      title,
+      start,
+      end,
+      status: "SCHEDULED",
+      alias,
+      mode: run.schedulingMode,
+    })
+  }
+
+  return events
 }
 
 function toDateKey(isoDate: string) {
@@ -160,7 +207,11 @@ export default function DashboardClient({
     },
   })
 
-  const events: CalendarTaskEvent[] = useMemo(() => taskRuns.map(taskRunToEvent), [taskRuns])
+  const events: CalendarTaskEvent[] = useMemo(() => {
+    // Expand recurring tasks to show future occurrences (90 days ahead)
+    const windowEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+    return taskRuns.flatMap((run) => expandRecurringEvents(run, windowEnd))
+  }, [taskRuns])
 
   const handleDateSelect = useCallback((start: Date, end: Date) => {
     setSelectedRange({ start, end })

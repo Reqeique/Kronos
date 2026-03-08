@@ -61,6 +61,7 @@ model TaskRun {
   failureReason       String?
   latestAgentMessage  String?
   completionPath      String?
+  cronSchedule        String?   // Added for recurring tasks
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   agent               Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)

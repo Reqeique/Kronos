@@ -7,7 +7,9 @@ import * as z from "zod";
 import { Check, ChevronsUpDown, Loader2, Calendar as CalendarIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
     Form,
     FormControl,
@@ -77,16 +79,20 @@ interface TaskRun {
     failureReason: string | null;
     latestAgentMessage: string | null;
     completionPath: string | null;
+    cronSchedule: string | null;
     agent?: { alias: string; name: string };
 }
 
 const formSchema = z.object({
     agentId: z.string().min(1, "Please select an agent"),
     taskBody: z.string().min(1, "Task description is required"),
-    scheduledAt: z.string().min(1, "Schedule time is required"),
+    scheduledAtDate: z.date(),
+    scheduledAtTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time"),
     schedulingMode: z.enum(["AUTONOMOUS", "SUPERVISED", "OBSERVED"]),
     timeoutMinutes: z.coerce.number().min(1).max(1440),
     slackChannelId: z.string().optional(),
+    cronMode: z.string().optional(),
+    customCron: z.string().optional(),
 });
 
 type FormValues = z.output<typeof formSchema>;
@@ -118,11 +124,6 @@ const MODE_INFO = {
     },
 };
 
-function toLocalISOString(date: Date) {
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 export default function CreateTaskModal({
     agents,
     defaultStart,
@@ -139,28 +140,48 @@ export default function CreateTaskModal({
     const [mentionHighlight, setMentionHighlight] = useState(0);
     const taskTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+    const initialDate = defaultStart || new Date();
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const initialTime = `${pad(initialDate.getHours())}:${pad(initialDate.getMinutes())}`;
+
     const form = useForm<FormInput, undefined, FormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             agentId: agents[0]?.id ?? "",
             taskBody: "",
-            scheduledAt: defaultStart ? toLocalISOString(defaultStart) : toLocalISOString(new Date()),
+            scheduledAtDate: initialDate,
+            scheduledAtTime: initialTime,
             schedulingMode: "AUTONOMOUS",
             timeoutMinutes: 60,
             slackChannelId: "",
+            cronMode: "none",
+            customCron: "",
         },
     });
 
     async function onSubmit(values: FormValues) {
         setLoading(true);
         try {
+            const [hours, minutes] = values.scheduledAtTime.split(":").map(Number);
+            const scheduledAt = new Date(values.scheduledAtDate);
+            scheduledAt.setHours(hours, minutes, 0, 0);
+
+            let cronSchedule: string | undefined = undefined;
+            if (values.cronMode === "daily") cronSchedule = `${minutes} ${hours} * * *`;
+            else if (values.cronMode === "weekly") cronSchedule = `${minutes} ${hours} * * ${scheduledAt.getDay()}`;
+            else if (values.cronMode === "custom" && values.customCron?.trim()) cronSchedule = values.customCron.trim();
+
             const res = await fetch("/api/task-runs", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    ...values,
-                    scheduledAt: new Date(values.scheduledAt).toISOString(),
+                    agentId: values.agentId,
+                    taskBody: values.taskBody,
+                    schedulingMode: values.schedulingMode,
+                    slackChannelId: values.slackChannelId,
+                    scheduledAt: scheduledAt.toISOString(),
                     timeoutMinutes: Number(values.timeoutMinutes),
+                    cronSchedule,
                 }),
             });
             const data = await res.json();
@@ -402,13 +423,128 @@ export default function CreateTaskModal({
                         <div className="grid grid-cols-2 gap-4">
                             <FormField
                                 control={form.control}
-                                name="scheduledAt"
+                                name="scheduledAtDate"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                        <FormLabel>Date</FormLabel>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <FormControl>
+                                                    <Button
+                                                        variant={"outline"}
+                                                        className={cn(
+                                                            "w-full pl-3 text-left font-normal",
+                                                            !field.value && "text-muted-foreground"
+                                                        )}
+                                                    >
+                                                        {field.value ? (
+                                                            format(field.value, "PPP")
+                                                        ) : (
+                                                            <span>Pick a date</span>
+                                                        )}
+                                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </FormControl>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={field.value}
+                                                    onSelect={field.onChange}
+                                                    disabled={(date) =>
+                                                        date < new Date(new Date().setHours(0, 0, 0, 0))
+                                                    }
+                                                    initialFocus
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="scheduledAtTime"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                        <FormLabel>Time</FormLabel>
+                                        <FormControl>
+                                            <Input type="time" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="cronMode"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Scheduled At</FormLabel>
-                                        <FormControl>
-                                            <Input type="datetime-local" {...field} />
-                                        </FormControl>
+                                        <FormLabel>Repeat</FormLabel>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Does not repeat" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="none">Does not repeat</SelectItem>
+                                                <SelectItem value="daily">Daily</SelectItem>
+                                                <SelectItem value="weekly">Weekly</SelectItem>
+                                                <SelectItem value="custom">Custom Cron</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            {form.watch("cronMode") === "custom" ? (
+                                <FormField
+                                    control={form.control}
+                                    name="customCron"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Cron Expression</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="e.g. 0 12 * * *" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            ) : <div />}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="schedulingMode"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Scheduling Mode</FormLabel>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select mode" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {Object.entries(MODE_INFO).map(([mode, info]) => (
+                                                    <SelectItem key={mode} value={mode}>
+                                                        <div className="flex items-center gap-2">
+                                                            <SchedulingModeIcon mode={mode} className="h-4 w-4" />
+                                                            <div>
+                                                                <div className="font-medium">{info.label}</div>
+                                                                <div className="text-xs text-muted-foreground">{info.desc}</div>
+                                                            </div>
+                                                        </div>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -434,37 +570,6 @@ export default function CreateTaskModal({
                                 )}
                             />
                         </div>
-
-                        <FormField
-                            control={form.control}
-                            name="schedulingMode"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Scheduling Mode</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select mode" />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            {Object.entries(MODE_INFO).map(([mode, info]) => (
-                                                <SelectItem key={mode} value={mode}>
-                                                    <div className="flex items-center gap-2">
-                                                        <SchedulingModeIcon mode={mode} className="h-4 w-4" />
-                                                        <div>
-                                                            <div className="font-medium">{info.label}</div>
-                                                            <div className="text-xs text-muted-foreground">{info.desc}</div>
-                                                        </div>
-                                                    </div>
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
 
                         <FormField
                             control={form.control}

@@ -9,6 +9,7 @@ import {
     buildLifecycleUpdate,
     isTerminalStatus,
 } from "@/lib/taskRunLifecycle";
+import { handleRecurringTask } from "@/lib/recurringTasks";
 import { randomUUID } from "node:crypto";
 
 type AcpEventType = "session/new" | "session/pause" | "session/resume" | "session/prompt" | "session/end";
@@ -353,6 +354,11 @@ export async function POST(req: NextRequest) {
             status: updated.status,
             sessionId: body.sessionId ?? null,
         });
+
+        if (updated.status === "COMPLETED") {
+            // Check and schedule next recurring run in the background
+            void handleRecurringTask(updated.id);
+        }
 
         return successResponse({
             id: updated.id,

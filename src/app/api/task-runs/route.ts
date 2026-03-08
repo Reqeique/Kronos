@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
         const userId = (session.user as { id: string }).id;
         const body = await req.json();
 
-        const { agentId, taskBody, scheduledAt, schedulingMode, timeoutMinutes, slackChannelId } = body;
+        const { agentId, taskBody, scheduledAt, schedulingMode, timeoutMinutes, slackChannelId, cronSchedule } = body;
 
         if (!agentId || !taskBody || !scheduledAt) {
             throw Errors.badRequest("agentId, taskBody, and scheduledAt are required");
@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
                 scheduledAt: new Date(scheduledAt),
                 timeoutMinutes: timeoutMinutes ?? 60,
                 slackChannelId: slackChannelId ?? null,
+                cronSchedule: cronSchedule ?? null,
                 webhookToken,
             },
         });

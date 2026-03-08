@@ -4,6 +4,7 @@ import { errorResponse, successResponse, Errors } from "@/lib/errors";
 import eventBus from "@/lib/eventBus";
 import logger from "@/lib/logger";
 import { buildLifecycleUpdate, isTerminalStatus } from "@/lib/taskRunLifecycle";
+import { handleRecurringTask } from "@/lib/recurringTasks";
 
 // POST /api/webhook/complete — token-authenticated completion endpoint (Path B)
 export async function POST(req: NextRequest) {

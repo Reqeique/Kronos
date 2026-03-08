@@ -717,6 +717,7 @@ export const TaskRunScalarFieldEnum = {
   failureReason: 'failureReason',
   latestAgentMessage: 'latestAgentMessage',
   completionPath: 'completionPath',
+  cronSchedule: 'cronSchedule',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

@@ -20,8 +20,8 @@ function printHelp() {
 Usage:
   kronos login --token <token> [--server <url>]
   kronos proxy --agent <"command"> --alias <alias> [--token <token>] [--server <url>]
-  kronos watch-stdio --alias <alias> [--token <token>] [--server <url>] [--drive-acp] [--agent <"command">]
-  kronos watch-queue --alias <alias> [--token <token>] [--server <url>] --agent <"command"> [--queue-transport <streamable-http|polling>] [--poll-ms <n>] [--no-mention-preprocess]
+  kronos watch-stdio --alias <alias> [--token <token>] [--server <url>] [--drive-acp] [--agent <"command">] [--cwd <path>]
+  kronos watch-queue --alias <alias> [--token <token>] [--server <url>] --agent <"command"> [--queue-transport <streamable-http|polling>] [--poll-ms <n>] [--no-mention-preprocess] [--cwd <path>]
 
 Notes:
   - login stores token/server in ~/.kronos/config.json
@@ -31,6 +31,7 @@ Notes:
   - watch-queue is a persistent task consumer (streamable-http by default; polling optional)
   - by default, @file mentions in task prompts are autocompleted to project paths before sending to ACP
   - token can be provided by --token or saved via login
+  - The --cwd option (or --work-dir) changes the directory used for mention resolution and agent execution (defaults to process.cwd())
 `);
 }
 
@@ -297,12 +298,12 @@ function preprocessTaskMentions(taskBody, rootDir, log) {
 [kronos mention preprocessor]
 ${summaryLines.join("\n")}`;
 
-    log(`[drive-acp] mention preprocessing resolved ${resolutions.size} tag(s)`);
+    log(`[drive-acp] mention preprocessing resolved ${resolutions.size} tag(s) from ${rootDir}`);
     return { prompt, resolvedCount: resolutions.size };
 }
 
-function fetchPendingTaskForAlias(alias, dbPathInput) {
-    const dbPath = dbPathInput ? path.resolve(dbPathInput) : path.join(process.cwd(), "prisma", "dev.db");
+function fetchPendingTaskForAlias(alias, dbPathInput, currentDir) {
+    const dbPath = dbPathInput ? path.resolve(dbPathInput) : path.join(currentDir || process.cwd(), "prisma", "dev.db");
     if (!fs.existsSync(dbPath)) {
         throw new Error(`SQLite DB not found at ${dbPath}`);
     }
@@ -344,15 +345,17 @@ async function runDrivenAcpSession({
     handleParsedEvent,
     taskBodyOverride,
     mentionPreprocessEnabled,
+    cwd
 }) {
+    const rootDir = cwd ? path.resolve(cwd) : process.cwd();
     const taskBody = typeof taskBodyOverride === "string"
         ? taskBodyOverride.trim()
-        : fetchPendingTaskForAlias(alias, dbPath);
+        : fetchPendingTaskForAlias(alias, dbPath, rootDir);
     if (!taskBody) {
         throw new Error(`No active task found for @${alias}`);
     }
     const finalPrompt = mentionPreprocessEnabled
-        ? preprocessTaskMentions(taskBody, process.cwd(), log).prompt
+        ? preprocessTaskMentions(taskBody, rootDir, log).prompt
         : taskBody;
     log("[drive-acp] using task body:", finalPrompt);
 
@@ -370,6 +373,7 @@ async function runDrivenAcpSession({
     const child = spawn(agentCommand, {
         stdio: ["pipe", "pipe", "pipe"],
         shell: true,
+        cwd: rootDir,
     });
 
     let childExited = false;
@@ -419,7 +423,7 @@ async function runDrivenAcpSession({
         });
 
         const sessionResult = await connection.extMethod("session/new", {
-            cwd: process.cwd(),
+            cwd: rootDir,
             mcpServers: [],
         });
 
@@ -597,6 +601,7 @@ async function commandWatchStdio(rawArgs) {
         : "polling";
     const dbPath = typeof args["db-path"] === "string" ? args["db-path"] : undefined;
     const mentionPreprocessEnabled = !Boolean(args["no-mention-preprocess"]);
+    const customCwd = typeof args.cwd === "string" ? args.cwd : (typeof args["work-dir"] === "string" ? args["work-dir"] : undefined);
 
     if (!alias) {
         console.error("Missing --alias <alias>.");
@@ -766,6 +771,7 @@ async function commandWatchStdio(rawArgs) {
                     log,
                     handleParsedEvent,
                     mentionPreprocessEnabled,
+                    cwd: customCwd,
                 });
                 console.log(`[drive-acp] completed session ${result.sessionId} for task: ${result.taskBody}`);
                 await stopAndExit(0);
@@ -839,6 +845,7 @@ async function commandWatchStdio(rawArgs) {
                                 handleParsedEvent,
                                 taskBodyOverride: taskBody,
                                 mentionPreprocessEnabled,
+                                cwd: customCwd,
                             });
                             console.log(`[drive-acp] completed session ${result.sessionId} for task: ${result.taskBody}`);
                         } catch (error) {
@@ -879,6 +886,7 @@ async function commandWatchStdio(rawArgs) {
                     log,
                     handleParsedEvent,
                     mentionPreprocessEnabled,
+                    cwd: customCwd,
                 });
                 console.log(`[drive-acp] completed session ${result.sessionId} for task: ${result.taskBody}`);
             } catch (error) {
