@@ -7,6 +7,9 @@ import { auth } from "@/lib/auth";
 
 vi.mock("@/lib/prisma", () => ({
     default: {
+        agent: {
+            update: vi.fn(),
+        },
         taskRun: {
             findUnique: vi.fn(),
             findFirst: vi.fn(),

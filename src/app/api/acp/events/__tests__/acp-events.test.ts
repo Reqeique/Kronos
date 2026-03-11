@@ -9,6 +9,7 @@ vi.mock("@/lib/prisma", () => ({
     default: {
         agent: {
             findUnique: vi.fn(),
+            update: vi.fn(),
         },
         taskRun: {
             findUnique: vi.fn(),

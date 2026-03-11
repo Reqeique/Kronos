@@ -204,6 +204,14 @@ export default function DashboardClient({
             : run
         )
       )
+
+      setAgents((prev) =>
+        prev.map((agent) =>
+          agent.id === event.agentId
+            ? { ...agent, lastActiveAt: new Date().toISOString() }
+            : agent
+        )
+      )
     },
   })
 

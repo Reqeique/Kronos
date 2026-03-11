@@ -192,6 +192,12 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        // Mark agent activity on every accepted lifecycle event.
+        await prisma.agent.update({
+            where: { id: taskRun.agentId },
+            data: { lastActiveAt: eventAt },
+        });
+
         if (eventType === "session/pause" || eventType === "session/resume") {
             if (taskRun.schedulingMode !== "SUPERVISED") {
                 return successResponse({
