@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState, Suspense } from "react";
+import { FormEvent, useState, Suspense, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Mail, Lock, User } from "lucide-react";
@@ -31,6 +31,22 @@ function LoginContent() {
     const [error, setError] = useState<string | null>(null);
 
     const authError = searchParams.get("error");
+
+    // In demo mode, skip login and go straight to the dashboard
+    useEffect(() => {
+        if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+            router.replace("/dashboard");
+        }
+    }, [router]);
+
+    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+        );
+    }
+
 
     async function handleSignIn(e: FormEvent) {
         e.preventDefault();

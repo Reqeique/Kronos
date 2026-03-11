@@ -3,6 +3,9 @@ import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { errorResponse, successResponse, Errors } from "@/lib/errors";
 import logger from "@/lib/logger";
+import { DEMO_AGENTS } from "@/lib/demo-data";
+
+const IS_DEMO = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 // Alias validation: lowercase letters, numbers, and hyphens only
 const ALIAS_REGEX = /^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$/;
@@ -19,6 +22,8 @@ function sanitizeAlias(input: string): string {
 // GET /api/agents — list agents for current user
 export async function GET() {
     try {
+        if (IS_DEMO) return successResponse(DEMO_AGENTS);
+
         const session = await auth();
         if (!session?.user) throw Errors.unauthorized();
 
@@ -37,6 +42,8 @@ export async function GET() {
 // POST /api/agents — register new agent
 export async function POST(req: NextRequest) {
     try {
+        if (IS_DEMO) throw Errors.badRequest("Demo mode is read-only — agent creation is disabled.");
+
         const session = await auth();
         if (!session?.user) throw Errors.unauthorized();
 

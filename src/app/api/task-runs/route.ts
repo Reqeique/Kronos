@@ -12,10 +12,28 @@ import {
     buildLifecycleUpdate,
     isSchedulingMode,
 } from "@/lib/taskRunLifecycle";
+import { DEMO_TASK_RUNS } from "@/lib/demo-data";
+
+const IS_DEMO = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 // GET /api/task-runs list task runs for current user
 export async function GET(req: NextRequest) {
     try {
+        if (IS_DEMO) {
+            const { searchParams } = new URL(req.url);
+            const status = searchParams.get("status");
+            const agentId = searchParams.get("agentId");
+            const from = searchParams.get("from");
+            const to = searchParams.get("to");
+
+            let runs = [...DEMO_TASK_RUNS];
+            if (status) runs = runs.filter((r) => r.status === status);
+            if (agentId) runs = runs.filter((r) => r.agentId === agentId);
+            if (from) runs = runs.filter((r) => new Date(r.scheduledAt) >= new Date(from));
+            if (to) runs = runs.filter((r) => new Date(r.scheduledAt) <= new Date(to));
+            return successResponse(runs);
+        }
+
         const session = await auth();
         if (!session?.user) throw Errors.unauthorized();
 
@@ -52,6 +70,8 @@ export async function GET(req: NextRequest) {
 // POST /api/task-runs create new task run in SCHEDULED state
 export async function POST(req: NextRequest) {
     try {
+        if (IS_DEMO) throw Errors.badRequest("Demo mode is read-only — task creation is disabled.");
+
         const session = await auth();
         if (!session?.user) throw Errors.unauthorized();
 
@@ -126,6 +146,8 @@ export async function POST(req: NextRequest) {
 // PATCH /api/task-runs update task run status (state machine enforced)
 export async function PATCH(req: NextRequest) {
     try {
+        if (IS_DEMO) throw Errors.badRequest("Demo mode is read-only — status updates are disabled.");
+
         const session = await auth();
         if (!session?.user) throw Errors.unauthorized();
 
