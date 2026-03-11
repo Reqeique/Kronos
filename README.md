@@ -1,4 +1,4 @@
-# Kronos
+# Kronos - Demo
 
 Kronos is a scheduler/orchestration dashboard for running agent tasks through ACP with the `kronos` bridge CLI.
 
