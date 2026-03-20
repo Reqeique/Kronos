@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
     trustHost: true,
+    secret: process.env.NEXTAUTH_SECRET || "fallback-demo-secret-do-not-use-in-prod-12345",
     providers: [
         Credentials({
             name: "credentials",

@@ -4,6 +4,7 @@ import type { ApiResponse } from "@/types";
 
 // ─── Custom API Error ────────────────────────────────────
 export class ApiError extends Error {
+    public readonly isApiError = true;
     constructor(
         public statusCode: number,
         public code: string,
@@ -30,22 +31,25 @@ export function errorResponse(error: unknown): NextResponse<ApiResponse> {
         ? (logger as unknown as { constructor: { newTraceId: () => string } }).constructor.newTraceId?.() ?? "unknown"
         : "unknown";
 
-    if (error instanceof ApiError) {
-        logger.warn(`API Error: ${error.code}`, {
-            statusCode: error.statusCode,
-            message: error.message,
+    const isApiError = error instanceof ApiError || (error && typeof error === 'object' && 'isApiError' in error);
+
+    if (isApiError) {
+        const apiError = error as ApiError;
+        logger.warn(`API Error: ${apiError.code}`, {
+            statusCode: apiError.statusCode,
+            message: apiError.message,
         }, traceId);
 
         return NextResponse.json(
             {
                 success: false,
                 error: {
-                    code: error.code,
-                    message: error.message,
+                    code: apiError.code,
+                    message: apiError.message,
                     traceId,
                 },
             },
-            { status: error.statusCode },
+            { status: apiError.statusCode },
         );
     }
 
@@ -58,7 +62,7 @@ export function errorResponse(error: unknown): NextResponse<ApiResponse> {
             success: false,
             error: {
                 code: "INTERNAL_ERROR",
-                message: process.env.NODE_ENV === "development" ? message : "Internal server error",
+                message: message, // Allow returning real message in demo
                 traceId,
             },
         },
