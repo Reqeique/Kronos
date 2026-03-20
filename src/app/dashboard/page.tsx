@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { DEMO_AGENTS, DEMO_TASK_RUNS, DEMO_USER } from "@/lib/demo-data"
 
-const IS_DEMO = process.env.NEXT_PUBLIC_DEMO_MODE === "true"
+const IS_DEMO = true; // Hardcoded for demo branch
 
 export default async function DashboardPage() {
   // ── Demo mode: skip auth and DB entirely ──────────────────────────────────

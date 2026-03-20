@@ -17,8 +17,8 @@ export const DEMO_AGENTS = [
     {
         id: "agent-1",
         userId: DEMO_USER.id,
-        name: "Gemini CLI",
-        alias: "gemini-cli",
+        name: "Claude Code",
+        alias: "claude-code",
         agentType: "CUSTOM",
         connectionTier: "WEBHOOK",
         acpServerUrl: null,
@@ -29,8 +29,8 @@ export const DEMO_AGENTS = [
     {
         id: "agent-2",
         userId: DEMO_USER.id,
-        name: "Code Reviewer",
-        alias: "reviewer",
+        name: "OpenClaw",
+        alias: "openclaw",
         agentType: "CUSTOM",
         connectionTier: "WEBHOOK",
         acpServerUrl: null,
@@ -41,8 +41,8 @@ export const DEMO_AGENTS = [
     {
         id: "agent-3",
         userId: DEMO_USER.id,
-        name: "Support Bot",
-        alias: "support",
+        name: "Codex",
+        alias: "codex",
         agentType: "CUSTOM",
         connectionTier: "WEBHOOK",
         acpServerUrl: null,
@@ -53,8 +53,8 @@ export const DEMO_AGENTS = [
     {
         id: "agent-4",
         userId: DEMO_USER.id,
-        name: "Data Analyst",
-        alias: "analyst",
+        name: "Devin",
+        alias: "devin",
         agentType: "CUSTOM",
         connectionTier: "WEBHOOK",
         acpServerUrl: null,
@@ -65,8 +65,8 @@ export const DEMO_AGENTS = [
     {
         id: "agent-5",
         userId: DEMO_USER.id,
-        name: "Release Helper",
-        alias: "release",
+        name: "Cursor Bot",
+        alias: "cursor-bot",
         agentType: "CUSTOM",
         connectionTier: "WEBHOOK",
         acpServerUrl: null,
@@ -77,16 +77,16 @@ export const DEMO_AGENTS = [
 ];
 
 const taskDescriptions = [
-    "Summarize support incidents and tag priorities",
-    "Review PR #241 and leave release-risk notes",
-    "Generate daily KPI digest for leadership",
-    "Run dependency drift audit and security scan",
-    "Draft incident postmortem timeline",
-    "Validate webhook replay protection rules",
-    "Triage stale backlog tasks older than 14 days",
-    "Prepare sprint handoff notes for platform team",
-    "Analyze auth failure spikes from overnight logs",
-    "Compile release readiness checklist",
+    "Compile weekly customer feedback summary from Jira",
+    "Analyze recent competitor pricing updates across 5 websites",
+    "Draft Q3 marketing campaign email sequences",
+    "Organize scattered meeting transcripts into actionable Notion docs",
+    "Generate localized social media posts for the Asian market",
+    "Compare vendor API documentation for potential migration",
+    "Review legal boilerplate documents for inconsistent clauses",
+    "Prepare onboarding slide deck for new sales hires",
+    "Extract and classify expense receipts from the finance inbox",
+    "Write SEO-optimized blog posts based on trending industry topics",
 ];
 
 function makeTaskRuns() {
@@ -118,15 +118,22 @@ function makeTaskRuns() {
         agent: { alias: string; name: string };
     }[] = [];
 
-    const start = now - 14 * DAY;
+    const startDate = new Date("2026-03-10T09:00:00Z").getTime();
 
     DEMO_AGENTS.forEach((agent, agentIndex) => {
         for (let i = 0; i < 14; i++) {
-            const slot = agentIndex * 14 + i;
-            const scheduledMs = start + slot * 3 * HOUR;
+            const slot = agentIndex * 14 + i; // 0 to 69
+            
+            // 7 tasks per day (9 AM to 4 PM), over 10 days (March 10 to March 19)
+            const dayOffset = Math.floor(slot / 7);
+            const hourOffset = slot % 7;
+            
+            const scheduledMs = startDate + dayOffset * DAY + hourOffset * HOUR;
             const description = taskDescriptions[(slot + agentIndex) % taskDescriptions.length];
             const taskBody = `[${new Date(scheduledMs).toLocaleDateString("en-US")}] ${description} (${agent.alias})`;
-            const past = scheduledMs <= now;
+            
+            // For demo purposes, all these hardcoded tasks in March are considered past
+            const past = true;
 
             let status = "SCHEDULED";
             let dispatchedAt: string | null = null;
@@ -156,14 +163,16 @@ function makeTaskRuns() {
                     status = "IN_PROGRESS";
                 }
 
-                const dispatchMs = scheduledMs + 2 * 60 * 1000;
+                // Make them perfectly stacked: 1 hour long total
+                const dispatchMs = scheduledMs + 10 * 1000;
                 const startMs = dispatchMs + 10 * 1000;
                 dispatchedAt = new Date(dispatchMs).toISOString();
                 startedAt = new Date(startMs).toISOString();
                 completionPath = status === "COMPLETED" ? "WEBHOOK" : null;
 
                 if (status === "COMPLETED" || status === "FAILED" || status === "TIMED_OUT") {
-                    const finishMs = startMs + (12 + (slot % 18)) * 60 * 1000;
+                    // Force the completion to be almost exactly 1 hour later so blocks stack perfectly
+                    const finishMs = scheduledMs + 59 * 60 * 1000; // exactly 59 mins long to avoid UI overlap
                     completedAt = new Date(finishMs).toISOString();
                     totalActiveDuration = Math.round((finishMs - startMs) / 1000);
                 } else {

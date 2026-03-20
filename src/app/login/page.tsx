@@ -34,18 +34,14 @@ function LoginContent() {
 
     // In demo mode, skip login and go straight to the dashboard
     useEffect(() => {
-        if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-            router.replace("/dashboard");
-        }
+        router.replace("/dashboard");
     }, [router]);
 
-    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-        return (
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-        );
-    }
+    return (
+        <div className="min-h-screen flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+    );
 
 
     async function handleSignIn(e: FormEvent) {
