@@ -171,7 +171,7 @@ export default function DashboardClient({
 }) {
   const [agents, setAgents] = useState<Agent[]>(initialAgents)
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>(initialTaskRuns)
-  const [view, setView] = useState<CalView>("timeGridWeek")
+  const [view, setView] = useState<CalView>("dayGridMonth")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedRange, setSelectedRange] = useState<{ start: Date; end: Date } | null>(null)
   const [selectedTaskRunId, setSelectedTaskRunId] = useState<string | null>(null)
