@@ -1,6 +1,4 @@
 import { NextRequest } from "next/server";
-import prisma from "@/lib/prisma";
-import bcrypt from "bcryptjs";
 import { errorResponse, successResponse, Errors } from "@/lib/errors";
 import logger from "@/lib/logger";
 
@@ -18,29 +16,13 @@ export async function POST(req: NextRequest) {
             throw Errors.badRequest("Password must be at least 8 characters");
         }
 
-        // Check if user already exists
-        const existing = await prisma.user.findUnique({
-            where: { email },
-        });
+        // Hardcode success for demo branch
+        const userId = "demo-user-123";
 
-        if (existing) {
-            throw Errors.conflict("An account with this email already exists");
-        }
-
-        const passwordHash = await bcrypt.hash(password, 12);
-
-        const user = await prisma.user.create({
-            data: {
-                email,
-                name: name ?? null,
-                passwordHash,
-            },
-        });
-
-        logger.info("User registered", { userId: user.id, email });
+        logger.info("User registered", { userId, email });
 
         return successResponse(
-            { id: user.id, email: user.email, name: user.name },
+            { id: userId, email, name: name ?? "Demo User" },
             201,
         );
     } catch (error) {

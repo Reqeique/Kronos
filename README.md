@@ -6,15 +6,18 @@ Kronos is a scheduler/orchestration dashboard for running agent tasks through AC
 
 | Area | Feature | Status | Notes |
 |---|---|---|---|
-| Scheduling | Agent task scheduling from dashboard | Implemented | Create tasks with schedule, mode, timeout, and optional Slack channel |
+| Scheduling | Agent task scheduling from dashboard | Implemented | Create tasks with schedule (including recurring cron), mode, timeout, and optional Slack channel |
 | Lifecycle | Task state tracking (`SCHEDULED -> DISPATCHED -> IN_PROGRESS -> terminal`) | Implemented | Lifecycle synced through ACP event ingestion |
 | Queue Delivery | Streamable HTTP queue for workers | Implemented | `watch-queue` consumes `/api/bridge/tasks` by default |
 | Queue Delivery | Polling queue fallback | Implemented | `--queue-transport polling --poll-ms <n>` |
 | CLI Bridge | ACP stdio bridge and driven ACP mode | Implemented | `watch-stdio` and `watch-stdio --drive-acp` |
+| CLI Bridge | Workspace scope support | Implemented | Limit mention resolution and execution to a specific directory using `--cwd <path>` |
 | Mentions (UI) | `@` file autocomplete in New Task description | Implemented | Project-file suggestions from authenticated API |
+| Mentions (UI) | Configurable file suggestion scope | Implemented | Set working directory in Settings for `@` mentions |
 | Mentions (CLI) | Prompt mention preprocessing for `@...` paths | Implemented | Enabled by default, disable via `--no-mention-preprocess` |
 | Auth | Bridge token minting + alias-scoped worker auth | Implemented | Tokens issued via `/api/bridge/token` |
 | Observability | Real-time dashboard event stream | Implemented | SSE endpoint for task updates |
+| Observability | Agent activity tracking | Implemented | Agents' `lastActiveAt` is tracked and updated via ACP events |
 
 ## Coming Soon
 

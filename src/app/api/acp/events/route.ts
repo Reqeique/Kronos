@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
                     });
 
                     logger.info("ACP bridge auto-created OBSERVED task run", {
-                        taskRunId: taskRun.id,
+                        taskRunId: taskRun!.id,
                         alias: agent.alias,
                     });
                 }

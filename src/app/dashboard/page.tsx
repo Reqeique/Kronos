@@ -1,4 +1,4 @@
-﻿import DashboardClient from "@/components/DashboardClient"
+import DashboardClient from "@/components/DashboardClient"
 import { auth } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 import { redirect } from "next/navigation"
@@ -86,7 +86,7 @@ export default async function DashboardPage() {
     }),
   ])
 
-  const serializedAgents = agents.map((agent) => ({
+  const serializedAgents = (agents || []).map((agent: any) => ({
     id: agent.id,
     name: agent.name,
     alias: agent.alias,
@@ -95,7 +95,7 @@ export default async function DashboardPage() {
     lastActiveAt: agent.lastActiveAt?.toISOString() ?? null,
   }))
 
-  const serializedTaskRuns = taskRuns.map((run) => ({
+  const serializedTaskRuns = (taskRuns || []).map((run: any) => ({
     id: run.id,
     agentId: run.agentId,
     taskBody: run.taskBody,
