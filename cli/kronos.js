@@ -98,22 +98,53 @@ function normalizeEventType(rawType) {
 
 function parseIncomingPayload(payload) {
     const method = payload?.method || payload?.eventType || payload?.type || payload?.event;
+    const params = payload?.params && typeof payload.params === "object" ? payload.params : {};
+
+    // 1. Standard ACP JSON-RPC notification: client/session/update
+    if (method === "client/session/update" || method === "session/update" || method === "session.update") {
+        const update = params.update || payload.update || {};
+        const updateType = update.sessionUpdate || update.type;
+        const sessionId = payload.sessionId || params.sessionId || update.sessionId || null;
+        const timestamp = toIsoTimestamp(payload.timestamp || params.timestamp || update.timestamp);
+
+        // A) Message chunk -> session/prompt (updates live agent log)
+        if (updateType === "agent_message_chunk" || updateType === "message_chunk" || updateType === "message") {
+            const content = update.content || update.message || {};
+            const text = typeof content === "string" ? content : (content.text || content.content || "");
+            if (typeof text === "string" && text.trim()) {
+                return { eventType: "session/prompt", sessionId, timestamp, latestAgentMessage: text.trim() };
+            }
+        }
+
+        // B) state_update: running->resume, requires_action->pause, idle->end
+        if (updateType === "state_update" || update.state) {
+            const state = update.state || "";
+            if (state === "running") {
+                return { eventType: "session/resume", sessionId, timestamp, status: "running" };
+            } else if (state === "requires_action") {
+                return { eventType: "session/pause", sessionId, timestamp, status: "paused" };
+            } else if (state === "idle") {
+                const stopReason = update.stopReason;
+                const failed = stopReason === "failed" || stopReason === "error";
+                return {
+                    eventType: "session/end", sessionId, timestamp,
+                    status: failed ? "failed" : "completed",
+                    failureReason: failed ? "Agent stopped with error" : undefined
+                };
+            }
+        }
+    }
+
+    // 2. Fall back to Kronos-specific payload parsing
     const eventType = normalizeEventType(method);
     if (!eventType) return null;
 
-    const params = payload?.params && typeof payload.params === "object" ? payload.params : {};
     const sessionId = payload?.sessionId || params.sessionId || params.id || payload?.id || null;
     const status = payload?.status || payload?.result?.status || params.status || null;
     const failureReason = payload?.failureReason || params.failureReason || payload?.error?.message || null;
     const timestamp = toIsoTimestamp(payload?.timestamp || params.timestamp);
 
-    return {
-        eventType,
-        sessionId,
-        status,
-        failureReason,
-        timestamp,
-    };
+    return { eventType, sessionId, status, failureReason, timestamp };
 }
 
 function parseMessage(raw) {
@@ -359,10 +390,9 @@ async function runDrivenAcpSession({
         : taskBody;
     log("[drive-acp] using task body:", finalPrompt);
 
-    let ClientSideConnection;
-    let ndJsonStream;
+    let acp;
     try {
-        ({ ClientSideConnection, ndJsonStream } = await import("@agentclientprotocol/sdk"));
+        acp = await import("@agentclientprotocol/sdk");
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
@@ -385,63 +415,73 @@ async function runDrivenAcpSession({
         if (text) log("[drive-acp][agent]", text);
     });
 
-    const clientHandler = {
-        async requestPermission() {
-            return { action: "approve" };
-        },
-        async sessionUpdate(params) {
-            const updateType = params?.update?.sessionUpdate;
-            log("[drive-acp] sessionUpdate:", updateType || "unknown");
-            if (updateType === "agent_message_chunk") {
-                const text = params?.update?.content?.text;
-                if (typeof text === "string" && text.trim()) {
-                    handleParsedEvent({
-                        eventType: "session/prompt",
-                        sessionId,
-                        timestamp: new Date().toISOString(),
-                        latestAgentMessage: text.trim(),
-                    });
-                }
-            }
-        },
-    };
-
-    const stream = ndJsonStream(
+    const stream = acp.ndJsonStream(
         Writable.toWeb(child.stdin),
         Readable.toWeb(child.stdout),
     );
 
-    const connection = new ClientSideConnection(() => clientHandler, stream);
     let sessionId = null;
     let failure = null;
 
     try {
-        await connection.initialize({
-            protocolVersion: 1,
-            capabilities: {},
-            clientInfo: { name: "kronos-watch-stdio", version: "1.0.0" },
-        });
+        const app = acp.client({ name: "kronos-watch-stdio" })
+            .onRequest(acp.methods.client.session.requestPermission, () => ({
+                outcome: { outcome: "approved" },
+            }))
+            .onNotification(acp.methods.client.session.update, (ctx) => {
+                const update = ctx.params?.update;
+                const updateType = update?.sessionUpdate || update?.type;
+                log("[drive-acp] sessionUpdate:", updateType || "unknown");
 
-        const sessionResult = await connection.extMethod("session/new", {
-            cwd: rootDir,
-            mcpServers: [],
-        });
+                // Message chunk -> forward as session/prompt
+                if (updateType === "agent_message_chunk" || updateType === "message_chunk") {
+                    const text = update?.content?.text || update?.content || "";
+                    if (typeof text === "string" && text.trim()) {
+                        handleParsedEvent({
+                            eventType: "session/prompt",
+                            sessionId,
+                            timestamp: new Date().toISOString(),
+                            latestAgentMessage: text.trim(),
+                        });
+                    }
+                }
 
-        sessionId = sessionResult?.sessionId || null;
-        if (!sessionId) {
-            throw new Error("ACP session/new did not return a sessionId");
-        }
+                // state_update -> forward lifecycle transitions
+                if (updateType === "state_update" || update?.state) {
+                    const state = update?.state || "";
+                    if (state === "running") {
+                        handleParsedEvent({ eventType: "session/resume", sessionId, timestamp: new Date().toISOString() });
+                    } else if (state === "requires_action") {
+                        handleParsedEvent({ eventType: "session/pause", sessionId, timestamp: new Date().toISOString() });
+                    }
+                }
+            });
 
-        handleParsedEvent({
-            eventType: "session/new",
-            sessionId,
-            status: "running",
-            timestamp: new Date().toISOString(),
-        });
+        await app.connectWith(stream, async (ctx) => {
+            await ctx.request(acp.methods.agent.initialize, {
+                protocolVersion: acp.PROTOCOL_VERSION,
+                clientCapabilities: {},
+                clientInfo: { name: "kronos-watch-stdio", version: "1.0.0" },
+            });
 
-        await connection.extMethod("session/prompt", {
-            sessionId,
-            prompt: [{ type: "text", text: finalPrompt }],
+            const session = await ctx.buildSession(rootDir).start();
+            sessionId = session.sessionId;
+
+            handleParsedEvent({
+                eventType: "session/new",
+                sessionId,
+                status: "running",
+                timestamp: new Date().toISOString(),
+            });
+
+            await session.prompt(finalPrompt);
+
+            for (;;) {
+                const message = await session.nextUpdate();
+                if (message.kind === "stop") break;
+            }
+
+            session.dispose();
         });
     } catch (error) {
         failure = error instanceof Error ? error : new Error(String(error));
@@ -600,6 +640,7 @@ async function commandWatchStdio(rawArgs) {
         ? queueTransportRaw
         : "polling";
     const dbPath = typeof args["db-path"] === "string" ? args["db-path"] : undefined;
+    const taskBodyOverride = typeof args["task-body-override"] === "string" ? args["task-body-override"] : undefined;
     const mentionPreprocessEnabled = !Boolean(args["no-mention-preprocess"]);
     const customCwd = typeof args.cwd === "string" ? args.cwd : (typeof args["work-dir"] === "string" ? args["work-dir"] : undefined);
 
@@ -770,6 +811,7 @@ async function commandWatchStdio(rawArgs) {
                     dbPath,
                     log,
                     handleParsedEvent,
+                    taskBodyOverride,
                     mentionPreprocessEnabled,
                     cwd: customCwd,
                 });
