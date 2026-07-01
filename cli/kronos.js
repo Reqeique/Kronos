@@ -431,20 +431,6 @@ async function runDrivenAcpSession({
             .onNotification(acp.methods.client.session.update, (ctx) => {
                 const update = ctx.params?.update;
                 const updateType = update?.sessionUpdate || update?.type;
-                log("[drive-acp] sessionUpdate:", updateType || "unknown");
-
-                // Message chunk -> forward as session/prompt
-                if (updateType === "agent_message_chunk" || updateType === "message_chunk") {
-                    const text = update?.content?.text || update?.content || "";
-                    if (typeof text === "string" && text.trim()) {
-                        handleParsedEvent({
-                            eventType: "session/prompt",
-                            sessionId,
-                            timestamp: new Date().toISOString(),
-                            latestAgentMessage: text.trim(),
-                        });
-                    }
-                }
 
                 // state_update -> forward lifecycle transitions
                 if (updateType === "state_update" || update?.state) {
@@ -464,24 +450,41 @@ async function runDrivenAcpSession({
                 clientInfo: { name: "kronos-watch-stdio", version: "1.0.0" },
             });
 
-            const session = await ctx.buildSession(rootDir).start();
-            sessionId = session.sessionId;
+            return ctx.buildSession(rootDir).withSession(async (session) => {
+                sessionId = session.sessionId;
 
-            handleParsedEvent({
-                eventType: "session/new",
-                sessionId,
-                status: "running",
-                timestamp: new Date().toISOString(),
+                handleParsedEvent({
+                    eventType: "session/new",
+                    sessionId,
+                    status: "running",
+                    timestamp: new Date().toISOString(),
+                });
+
+                // prompt() is fire-and-forget per the ACP SDK example
+                session.prompt(finalPrompt);
+
+                for (;;) {
+                    const message = await session.nextUpdate();
+                    if (message.kind === "stop") break;
+                    // Forward agent message chunks to the cloud
+                    if (message.kind === "notification") {
+                        const update = message.notification?.params?.update;
+                        const updateType = update?.sessionUpdate || update?.type;
+                        log("[drive-acp] sessionUpdate:", updateType || "unknown");
+                        if (updateType === "agent_message_chunk" || updateType === "message_chunk") {
+                            const text = update?.content?.text || update?.content || "";
+                            if (typeof text === "string" && text.trim()) {
+                                handleParsedEvent({
+                                    eventType: "session/prompt",
+                                    sessionId,
+                                    timestamp: new Date().toISOString(),
+                                    latestAgentMessage: text.trim(),
+                                });
+                            }
+                        }
+                    }
+                }
             });
-
-            await session.prompt(finalPrompt);
-
-            for (;;) {
-                const message = await session.nextUpdate();
-                if (message.kind === "stop") break;
-            }
-
-            session.dispose();
         });
     } catch (error) {
         failure = error instanceof Error ? error : new Error(String(error));
