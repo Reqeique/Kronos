@@ -8,6 +8,7 @@
   },
   "scripts": {
     "kronos": "node ./cli/kronos.js",
+    "agent": "node ./cli/kronos.js watch-queue --agent \"opencode acp\"",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

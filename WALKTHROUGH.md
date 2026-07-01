@@ -4,19 +4,15 @@ This walkthrough details the steps to set up, execute, and verify the Kronos age
 
 ## Prerequisites
 
-1. Initialize and build the production Next.js application:
+1. Start the Next.js server:
    ```powershell
-   npm run build
-   npm run start
+   npm run dev
    ```
-2. In another terminal, generate your 30-day bridge token:
+2. Navigate to `http://localhost:3000/settings` and register or log in.
+3. Under **Bridge Tokens**, generate a new token and copy it to your clipboard.
+4. Save the token locally:
    ```powershell
-   node -e "
-     const c=require('node:crypto'), s=process.env.NEXTAUTH_SECRET||'kronos-dev-bridge-secret';
-     const p={userId:'350ccc0b-6eae-4e5d-970b-c5f9b772c1d9',exp:Math.floor(Date.now()/1000)+2592000};
-     const enc=Buffer.from(JSON.stringify(p)).toString('base64url');
-     console.log(enc+'.'+c.createHmac('sha256',s).update(enc).digest().toString('base64url'));
-   " --env-file .env
+   npm run kronos login -- --token <YOUR_COPIED_TOKEN> --server http://localhost:3000
    ```
 
 ---
@@ -25,21 +21,17 @@ This walkthrough details the steps to set up, execute, and verify the Kronos age
 
 1. Navigate to the dashboard at `http://localhost:3000/dashboard`.
 2. Click **+ New Task** to open the creation dialog.
-3. Select the `@gemini-cli` agent alias.
+3. Select an agent alias (e.g., `@oc`).
 4. Input a prompt (e.g., `"Name the first capital city in North America. Answer in one sentence."`).
-5. Choose a scheduled execution time (e.g., 1 minute in the future) and click **Schedule Task**.
+5. Choose a scheduled execution time and click **Schedule Task**.
 
 ---
 
-## 2. Dispatching the Task via the CLI
+## 2. Running the Agent Listener
 
-Run the CLI watcher process using the bridge token generated above:
+Launch the listener using the simplified script alias:
 ```powershell
-node ./cli/kronos.js watch-stdio \
-  --drive-acp --agent "opencode acp" \
-  --alias gemini-cli --token <BRIDGE_TOKEN> \
-  --server http://localhost:3000 \
-  --verbose
+npm run agent -- --alias oc --verbose
 ```
 
 ### Flow & Events Logged:
