@@ -12,6 +12,7 @@ interface TaskRun {
     id: string;
     agentId: string;
     taskBody: string;
+    sessionTitle: string | null;
     status: string;
     schedulingMode: string;
     scheduledAt: string;
@@ -100,7 +101,10 @@ export default function BlockDetailPanel({ taskRun, onClose }: BlockDetailPanelP
 
                     <div className="space-y-2">
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Task</span>
-                        <div className="text-sm bg-muted/50 p-3 rounded-lg border leading-relaxed">
+                        {taskRun.sessionTitle && (
+                            <div className="text-sm font-semibold leading-snug">{taskRun.sessionTitle}</div>
+                        )}
+                        <div className="text-sm bg-muted/50 p-3 rounded-lg border leading-relaxed text-muted-foreground">
                             {taskRun.taskBody}
                         </div>
                     </div>

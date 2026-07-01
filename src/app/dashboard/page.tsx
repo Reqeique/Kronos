@@ -1,4 +1,4 @@
-﻿import DashboardClient from "@/components/DashboardClient"
+import DashboardClient from "@/components/DashboardClient"
 import { auth } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 import { redirect } from "next/navigation"
@@ -46,6 +46,7 @@ export default async function DashboardPage() {
     id: run.id,
     agentId: run.agentId,
     taskBody: run.taskBody,
+    sessionTitle: run.sessionTitle ?? null,
     status: run.status,
     schedulingMode: run.schedulingMode,
     scheduledAt: run.scheduledAt.toISOString(),

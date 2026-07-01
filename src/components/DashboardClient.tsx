@@ -41,6 +41,7 @@ interface TaskRun {
   id: string
   agentId: string
   taskBody: string
+  sessionTitle: string | null
   status: string
   schedulingMode: string
   scheduledAt: string
@@ -74,9 +75,10 @@ function taskRunToEvent(run: TaskRun): CalendarTaskEvent {
     ).toISOString()
     : new Date(new Date(run.scheduledAt).getTime() + run.timeoutMinutes * 60000).toISOString()
 
+  const label = run.sessionTitle ?? run.taskBody
   return {
     id: run.id,
-    title: run.taskBody.slice(0, 60) + (run.taskBody.length > 60 ? "..." : ""),
+    title: label.slice(0, 60) + (label.length > 60 ? "..." : ""),
     start: run.startedAt ?? run.dispatchedAt ?? run.scheduledAt,
     end,
     status: run.status,
@@ -94,7 +96,8 @@ function expandRecurringEvents(run: TaskRun, windowEnd: Date): CalendarTaskEvent
 
   const events: CalendarTaskEvent[] = [taskRunToEvent(run)]
   const alias = run.agent?.alias ?? "unknown"
-  const title = run.taskBody.slice(0, 60) + (run.taskBody.length > 60 ? "..." : "")
+  const label = run.sessionTitle ?? run.taskBody
+  const title = label.slice(0, 60) + (label.length > 60 ? "..." : "")
   const durationMs = run.timeoutMinutes * 60000
 
   // Parse simple cron patterns: "min hour * * *" (daily) and "min hour * * dow" (weekly)

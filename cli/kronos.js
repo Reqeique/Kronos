@@ -472,6 +472,22 @@ async function runDrivenAcpSession({
                     if (message.kind === "session_update") {
                         const update = message.update;
                         const updateType = update?.sessionUpdate || update?.type;
+
+                        // Capture the agent-generated session title
+                        if (updateType === "session_title_update" || updateType === "title_update") {
+                            const title = update?.title || update?.content?.text || "";
+                            if (typeof title === "string" && title.trim()) {
+                                log("[drive-acp] session title:", title.trim());
+                                handleParsedEvent({
+                                    eventType: "session/title",
+                                    sessionId,
+                                    timestamp: new Date().toISOString(),
+                                    sessionTitle: title.trim(),
+                                });
+                            }
+                        }
+
+                        // Forward streamed response chunks (accumulated for full message)
                         if (updateType === "agent_message_chunk" || updateType === "message_chunk") {
                             const text = update?.content?.text || (typeof update?.content === "string" ? update.content : "") || "";
                             if (typeof text === "string" && text) {

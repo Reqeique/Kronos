@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import * as React from "react"
 import { EyeIcon, SendIcon } from "lucide-react"
@@ -25,6 +25,7 @@ export interface TaskRunTableItem {
   id: string
   agentId: string
   taskBody: string
+  sessionTitle?: string | null
   status: string
   schedulingMode: string
   scheduledAt: string
@@ -128,7 +129,7 @@ export function TaskRunsTable({ taskRuns, onOpenDetails }: TaskRunsTableProps) {
                     return (
                       <TableRow key={run.id}>
                         <TableCell className="max-w-[360px] truncate font-medium" title={run.taskBody}>
-                          {run.taskBody}
+                          {run.sessionTitle ?? run.taskBody}
                         </TableCell>
                         <TableCell className="font-mono text-xs">
                           @{run.agent?.alias ?? "unknown"}

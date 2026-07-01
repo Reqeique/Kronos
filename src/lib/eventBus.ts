@@ -18,6 +18,7 @@ export interface TaskRunEvent {
         totalActiveDuration?: number;
         totalWaitDuration?: number;
         latestAgentMessage?: string | null;
+        sessionTitle?: string | null;
     };
 }
 

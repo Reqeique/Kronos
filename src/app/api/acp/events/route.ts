@@ -12,7 +12,7 @@ import {
 import { handleRecurringTask } from "@/lib/recurringTasks";
 import { randomUUID } from "node:crypto";
 
-type AcpEventType = "session/new" | "session/pause" | "session/resume" | "session/prompt" | "session/end";
+type AcpEventType = "session/new" | "session/pause" | "session/resume" | "session/prompt" | "session/title" | "session/end";
 
 interface AcpEventBody {
     eventType?: string;
@@ -24,6 +24,7 @@ interface AcpEventBody {
     status?: string;
     result?: string;
     latestAgentMessage?: string;
+    sessionTitle?: string;
     failureReason?: string;
 }
 
@@ -56,6 +57,7 @@ function normalizeEventType(input: string | undefined): AcpEventType | null {
     if (value === "session/pause" || value === "session.pause" || value === "pause" || value === "permission") return "session/pause";
     if (value === "session/resume" || value === "session.resume" || value === "resume") return "session/resume";
     if (value === "session/prompt" || value === "session.prompt" || value === "prompt") return "session/prompt";
+    if (value === "session/title" || value === "session.title" || value === "title") return "session/title";
     if (value === "session/end" || value === "session.end" || value === "end") return "session/end";
     return null;
 }
@@ -97,7 +99,7 @@ export async function POST(req: NextRequest) {
         const body = (await req.json()) as AcpEventBody;
         const eventType = normalizeEventType(body.eventType);
         if (!eventType) {
-            throw Errors.badRequest("eventType must be one of: session/new, session/pause, session/resume, session/end");
+            throw Errors.badRequest("eventType must be one of: session/new, session/prompt, session/title, session/pause, session/resume, session/end");
         }
 
         const eventAt = parseTimestamp(body.timestamp);
@@ -249,6 +251,36 @@ export async function POST(req: NextRequest) {
                 startedAt: updated.startedAt,
                 latestAgentMessage: updated.latestAgentMessage,
             });
+        }
+
+        if (eventType === "session/title") {
+            const title = body.sessionTitle?.trim();
+            if (!title) {
+                return successResponse({ id: taskRun.id, ignored: true, reason: "empty sessionTitle" });
+            }
+
+            const updated = await prisma.taskRun.update({
+                where: { id: taskRun.id },
+                data: {
+                    sessionTitle: title,
+                    ...(body.sessionId ? { acpSessionId: body.sessionId } : {}),
+                },
+            });
+
+            eventBus.emitTaskRunUpdated({
+                id: updated.id,
+                status: updated.status,
+                agentId: updated.agentId,
+                sessionTitle: updated.sessionTitle,
+            });
+
+            logger.info("ACP session title set", {
+                taskRunId: updated.id,
+                alias: taskRun.agent.alias,
+                sessionTitle: title,
+            });
+
+            return successResponse({ id: updated.id, sessionTitle: updated.sessionTitle });
         }
 
         if (eventType === "session/pause") {

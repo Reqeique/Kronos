@@ -59,6 +59,7 @@ model TaskRun {
   totalWaitDuration   Int       @default(0)
   totalActiveDuration Int       @default(0)
   failureReason       String?
+  sessionTitle        String?
   latestAgentMessage  String?
   completionPath      String?
   cronSchedule        String?   // Added for recurring tasks
