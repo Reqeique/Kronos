@@ -60,6 +60,7 @@ export type TaskRunMinAggregateOutputType = {
   totalWaitDuration: number | null
   totalActiveDuration: number | null
   failureReason: string | null
+  sessionTitle: string | null
   latestAgentMessage: string | null
   completionPath: string | null
   cronSchedule: string | null
@@ -87,6 +88,7 @@ export type TaskRunMaxAggregateOutputType = {
   totalWaitDuration: number | null
   totalActiveDuration: number | null
   failureReason: string | null
+  sessionTitle: string | null
   latestAgentMessage: string | null
   completionPath: string | null
   cronSchedule: string | null
@@ -114,6 +116,7 @@ export type TaskRunCountAggregateOutputType = {
   totalWaitDuration: number
   totalActiveDuration: number
   failureReason: number
+  sessionTitle: number
   latestAgentMessage: number
   completionPath: number
   cronSchedule: number
@@ -157,6 +160,7 @@ export type TaskRunMinAggregateInputType = {
   totalWaitDuration?: true
   totalActiveDuration?: true
   failureReason?: true
+  sessionTitle?: true
   latestAgentMessage?: true
   completionPath?: true
   cronSchedule?: true
@@ -184,6 +188,7 @@ export type TaskRunMaxAggregateInputType = {
   totalWaitDuration?: true
   totalActiveDuration?: true
   failureReason?: true
+  sessionTitle?: true
   latestAgentMessage?: true
   completionPath?: true
   cronSchedule?: true
@@ -211,6 +216,7 @@ export type TaskRunCountAggregateInputType = {
   totalWaitDuration?: true
   totalActiveDuration?: true
   failureReason?: true
+  sessionTitle?: true
   latestAgentMessage?: true
   completionPath?: true
   cronSchedule?: true
@@ -325,6 +331,7 @@ export type TaskRunGroupByOutputType = {
   totalWaitDuration: number
   totalActiveDuration: number
   failureReason: string | null
+  sessionTitle: string | null
   latestAgentMessage: string | null
   completionPath: string | null
   cronSchedule: string | null
@@ -375,6 +382,7 @@ export type TaskRunWhereInput = {
   totalWaitDuration?: Prisma.IntFilter<"TaskRun"> | number
   totalActiveDuration?: Prisma.IntFilter<"TaskRun"> | number
   failureReason?: Prisma.StringNullableFilter<"TaskRun"> | string | null
+  sessionTitle?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   latestAgentMessage?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   completionPath?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   cronSchedule?: Prisma.StringNullableFilter<"TaskRun"> | string | null
@@ -404,6 +412,7 @@ export type TaskRunOrderByWithRelationInput = {
   totalWaitDuration?: Prisma.SortOrder
   totalActiveDuration?: Prisma.SortOrder
   failureReason?: Prisma.SortOrderInput | Prisma.SortOrder
+  sessionTitle?: Prisma.SortOrderInput | Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrderInput | Prisma.SortOrder
   completionPath?: Prisma.SortOrderInput | Prisma.SortOrder
   cronSchedule?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -436,6 +445,7 @@ export type TaskRunWhereUniqueInput = Prisma.AtLeast<{
   totalWaitDuration?: Prisma.IntFilter<"TaskRun"> | number
   totalActiveDuration?: Prisma.IntFilter<"TaskRun"> | number
   failureReason?: Prisma.StringNullableFilter<"TaskRun"> | string | null
+  sessionTitle?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   latestAgentMessage?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   completionPath?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   cronSchedule?: Prisma.StringNullableFilter<"TaskRun"> | string | null
@@ -465,6 +475,7 @@ export type TaskRunOrderByWithAggregationInput = {
   totalWaitDuration?: Prisma.SortOrder
   totalActiveDuration?: Prisma.SortOrder
   failureReason?: Prisma.SortOrderInput | Prisma.SortOrder
+  sessionTitle?: Prisma.SortOrderInput | Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrderInput | Prisma.SortOrder
   completionPath?: Prisma.SortOrderInput | Prisma.SortOrder
   cronSchedule?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -500,6 +511,7 @@ export type TaskRunScalarWhereWithAggregatesInput = {
   totalWaitDuration?: Prisma.IntWithAggregatesFilter<"TaskRun"> | number
   totalActiveDuration?: Prisma.IntWithAggregatesFilter<"TaskRun"> | number
   failureReason?: Prisma.StringNullableWithAggregatesFilter<"TaskRun"> | string | null
+  sessionTitle?: Prisma.StringNullableWithAggregatesFilter<"TaskRun"> | string | null
   latestAgentMessage?: Prisma.StringNullableWithAggregatesFilter<"TaskRun"> | string | null
   completionPath?: Prisma.StringNullableWithAggregatesFilter<"TaskRun"> | string | null
   cronSchedule?: Prisma.StringNullableWithAggregatesFilter<"TaskRun"> | string | null
@@ -525,6 +537,7 @@ export type TaskRunCreateInput = {
   totalWaitDuration?: number
   totalActiveDuration?: number
   failureReason?: string | null
+  sessionTitle?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
   cronSchedule?: string | null
@@ -554,6 +567,7 @@ export type TaskRunUncheckedCreateInput = {
   totalWaitDuration?: number
   totalActiveDuration?: number
   failureReason?: string | null
+  sessionTitle?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
   cronSchedule?: string | null
@@ -579,6 +593,7 @@ export type TaskRunUpdateInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -608,6 +623,7 @@ export type TaskRunUncheckedUpdateInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -635,6 +651,7 @@ export type TaskRunCreateManyInput = {
   totalWaitDuration?: number
   totalActiveDuration?: number
   failureReason?: string | null
+  sessionTitle?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
   cronSchedule?: string | null
@@ -660,6 +677,7 @@ export type TaskRunUpdateManyMutationInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -687,6 +705,7 @@ export type TaskRunUncheckedUpdateManyInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -724,6 +743,7 @@ export type TaskRunCountOrderByAggregateInput = {
   totalWaitDuration?: Prisma.SortOrder
   totalActiveDuration?: Prisma.SortOrder
   failureReason?: Prisma.SortOrder
+  sessionTitle?: Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrder
   completionPath?: Prisma.SortOrder
   cronSchedule?: Prisma.SortOrder
@@ -758,6 +778,7 @@ export type TaskRunMaxOrderByAggregateInput = {
   totalWaitDuration?: Prisma.SortOrder
   totalActiveDuration?: Prisma.SortOrder
   failureReason?: Prisma.SortOrder
+  sessionTitle?: Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrder
   completionPath?: Prisma.SortOrder
   cronSchedule?: Prisma.SortOrder
@@ -785,6 +806,7 @@ export type TaskRunMinOrderByAggregateInput = {
   totalWaitDuration?: Prisma.SortOrder
   totalActiveDuration?: Prisma.SortOrder
   failureReason?: Prisma.SortOrder
+  sessionTitle?: Prisma.SortOrder
   latestAgentMessage?: Prisma.SortOrder
   completionPath?: Prisma.SortOrder
   cronSchedule?: Prisma.SortOrder
@@ -909,6 +931,7 @@ export type TaskRunCreateWithoutUserInput = {
   totalWaitDuration?: number
   totalActiveDuration?: number
   failureReason?: string | null
+  sessionTitle?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
   cronSchedule?: string | null
@@ -936,6 +959,7 @@ export type TaskRunUncheckedCreateWithoutUserInput = {
   totalWaitDuration?: number
   totalActiveDuration?: number
   failureReason?: string | null
+  sessionTitle?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
   cronSchedule?: string | null
@@ -991,6 +1015,7 @@ export type TaskRunScalarWhereInput = {
   totalWaitDuration?: Prisma.IntFilter<"TaskRun"> | number
   totalActiveDuration?: Prisma.IntFilter<"TaskRun"> | number
   failureReason?: Prisma.StringNullableFilter<"TaskRun"> | string | null
+  sessionTitle?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   latestAgentMessage?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   completionPath?: Prisma.StringNullableFilter<"TaskRun"> | string | null
   cronSchedule?: Prisma.StringNullableFilter<"TaskRun"> | string | null
@@ -1016,6 +1041,7 @@ export type TaskRunCreateWithoutAgentInput = {
   totalWaitDuration?: number
   totalActiveDuration?: number
   failureReason?: string | null
+  sessionTitle?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
   cronSchedule?: string | null
@@ -1043,6 +1069,7 @@ export type TaskRunUncheckedCreateWithoutAgentInput = {
   totalWaitDuration?: number
   totalActiveDuration?: number
   failureReason?: string | null
+  sessionTitle?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
   cronSchedule?: string | null
@@ -1094,6 +1121,7 @@ export type TaskRunCreateManyUserInput = {
   totalWaitDuration?: number
   totalActiveDuration?: number
   failureReason?: string | null
+  sessionTitle?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
   cronSchedule?: string | null
@@ -1119,6 +1147,7 @@ export type TaskRunUpdateWithoutUserInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1146,6 +1175,7 @@ export type TaskRunUncheckedUpdateWithoutUserInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1172,6 +1202,7 @@ export type TaskRunUncheckedUpdateManyWithoutUserInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1198,6 +1229,7 @@ export type TaskRunCreateManyAgentInput = {
   totalWaitDuration?: number
   totalActiveDuration?: number
   failureReason?: string | null
+  sessionTitle?: string | null
   latestAgentMessage?: string | null
   completionPath?: string | null
   cronSchedule?: string | null
@@ -1223,6 +1255,7 @@ export type TaskRunUpdateWithoutAgentInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1250,6 +1283,7 @@ export type TaskRunUncheckedUpdateWithoutAgentInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1276,6 +1310,7 @@ export type TaskRunUncheckedUpdateManyWithoutAgentInput = {
   totalWaitDuration?: Prisma.IntFieldUpdateOperationsInput | number
   totalActiveDuration?: Prisma.IntFieldUpdateOperationsInput | number
   failureReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sessionTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   latestAgentMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   completionPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   cronSchedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1305,6 +1340,7 @@ export type TaskRunSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   totalWaitDuration?: boolean
   totalActiveDuration?: boolean
   failureReason?: boolean
+  sessionTitle?: boolean
   latestAgentMessage?: boolean
   completionPath?: boolean
   cronSchedule?: boolean
@@ -1334,6 +1370,7 @@ export type TaskRunSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
   totalWaitDuration?: boolean
   totalActiveDuration?: boolean
   failureReason?: boolean
+  sessionTitle?: boolean
   latestAgentMessage?: boolean
   completionPath?: boolean
   cronSchedule?: boolean
@@ -1363,6 +1400,7 @@ export type TaskRunSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
   totalWaitDuration?: boolean
   totalActiveDuration?: boolean
   failureReason?: boolean
+  sessionTitle?: boolean
   latestAgentMessage?: boolean
   completionPath?: boolean
   cronSchedule?: boolean
@@ -1392,6 +1430,7 @@ export type TaskRunSelectScalar = {
   totalWaitDuration?: boolean
   totalActiveDuration?: boolean
   failureReason?: boolean
+  sessionTitle?: boolean
   latestAgentMessage?: boolean
   completionPath?: boolean
   cronSchedule?: boolean
@@ -1399,7 +1438,7 @@ export type TaskRunSelectScalar = {
   updatedAt?: boolean
 }
 
-export type TaskRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "agentId" | "taskBody" | "status" | "schedulingMode" | "scheduledAt" | "dispatchedAt" | "startedAt" | "completedAt" | "slackMessageTs" | "slackChannelId" | "webhookToken" | "acpSessionId" | "timeoutMinutes" | "pauseCount" | "totalWaitDuration" | "totalActiveDuration" | "failureReason" | "latestAgentMessage" | "completionPath" | "cronSchedule" | "createdAt" | "updatedAt", ExtArgs["result"]["taskRun"]>
+export type TaskRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "agentId" | "taskBody" | "status" | "schedulingMode" | "scheduledAt" | "dispatchedAt" | "startedAt" | "completedAt" | "slackMessageTs" | "slackChannelId" | "webhookToken" | "acpSessionId" | "timeoutMinutes" | "pauseCount" | "totalWaitDuration" | "totalActiveDuration" | "failureReason" | "sessionTitle" | "latestAgentMessage" | "completionPath" | "cronSchedule" | "createdAt" | "updatedAt", ExtArgs["result"]["taskRun"]>
 export type TaskRunInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   agent?: boolean | Prisma.AgentDefaultArgs<ExtArgs>
   user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
@@ -1439,6 +1478,7 @@ export type $TaskRunPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     totalWaitDuration: number
     totalActiveDuration: number
     failureReason: string | null
+    sessionTitle: string | null
     latestAgentMessage: string | null
     completionPath: string | null
     cronSchedule: string | null
@@ -1888,6 +1928,7 @@ export interface TaskRunFieldRefs {
   readonly totalWaitDuration: Prisma.FieldRef<"TaskRun", 'Int'>
   readonly totalActiveDuration: Prisma.FieldRef<"TaskRun", 'Int'>
   readonly failureReason: Prisma.FieldRef<"TaskRun", 'String'>
+  readonly sessionTitle: Prisma.FieldRef<"TaskRun", 'String'>
   readonly latestAgentMessage: Prisma.FieldRef<"TaskRun", 'String'>
   readonly completionPath: Prisma.FieldRef<"TaskRun", 'String'>
   readonly cronSchedule: Prisma.FieldRef<"TaskRun", 'String'>

@@ -120,6 +120,7 @@ export const TaskRunScalarFieldEnum = {
   totalWaitDuration: 'totalWaitDuration',
   totalActiveDuration: 'totalActiveDuration',
   failureReason: 'failureReason',
+  sessionTitle: 'sessionTitle',
   latestAgentMessage: 'latestAgentMessage',
   completionPath: 'completionPath',
   cronSchedule: 'cronSchedule',

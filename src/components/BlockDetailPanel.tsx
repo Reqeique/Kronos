@@ -12,7 +12,7 @@ interface TaskRun {
     id: string;
     agentId: string;
     taskBody: string;
-    sessionTitle: string | null;
+    sessionTitle?: string | null;
     status: string;
     schedulingMode: string;
     scheduledAt: string;
