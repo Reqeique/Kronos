@@ -665,7 +665,7 @@ async function commandWatchStdio(rawArgs) {
         ? args.agent
         : (typeof args["agent-cmd"] === "string"
             ? args["agent-cmd"]
-            : `${process.env.KRONOS_ACP_AGENT_CMD || ""}`.trim());
+            : (`${process.env.KRONOS_ACP_AGENT_CMD || config.agent || "opencode acp"}`.trim()));
     const rawPollMs = Number(args["poll-ms"] ?? args.interval ?? 3000);
     const pollMs = Number.isFinite(rawPollMs) ? Math.max(500, Math.floor(rawPollMs)) : 3000;
     const queueTransportRaw = `${args["queue-transport"] || args.transport || ""}`.trim().toLowerCase();
@@ -676,8 +676,7 @@ async function commandWatchStdio(rawArgs) {
     const taskBodyOverride = typeof args["task-body-override"] === "string" ? args["task-body-override"] : undefined;
     const mentionPreprocessEnabled = !Boolean(args["no-mention-preprocess"]);
     const customCwd = typeof args.cwd === "string" ? args.cwd : (typeof args["work-dir"] === "string" ? args["work-dir"] : undefined);
-    const driveAcpAgentCommand = args.agent || config.agent || "opencode acp";
-    const verbose = Boolean(args.verbose);
+
 
     if (!alias) {
         console.error("Missing --alias <alias>.");
