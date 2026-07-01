@@ -473,9 +473,21 @@ async function runDrivenAcpSession({
                         const update = message.update;
                         const updateType = update?.sessionUpdate || update?.type;
 
-                        // Capture the agent-generated session title
-                        if (updateType === "session_title_update" || updateType === "title_update") {
-                            const title = update?.title || update?.content?.text || "";
+                        // Dump every update type so we can see what opencode actually emits
+                        log("[drive-acp] update:", updateType, JSON.stringify(update).slice(0, 200));
+
+                        // Capture the agent-generated session title (try all known field shapes)
+                        if (
+                            updateType === "session_title_update" ||
+                            updateType === "title_update" ||
+                            updateType === "titleUpdate"
+                        ) {
+                            const title =
+                                update?.title ||
+                                update?.sessionTitle ||
+                                update?.content?.text ||
+                                (typeof update?.content === "string" ? update.content : "") ||
+                                "";
                             if (typeof title === "string" && title.trim()) {
                                 log("[drive-acp] session title:", title.trim());
                                 handleParsedEvent({

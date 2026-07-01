@@ -26,6 +26,7 @@ export interface TaskRunTableItem {
   agentId: string
   taskBody: string
   sessionTitle?: string | null
+  latestAgentMessage?: string | null
   status: string
   schedulingMode: string
   scheduledAt: string
@@ -128,8 +129,13 @@ export function TaskRunsTable({ taskRuns, onOpenDetails }: TaskRunsTableProps) {
 
                     return (
                       <TableRow key={run.id}>
-                        <TableCell className="max-w-[360px] truncate font-medium" title={run.taskBody}>
-                          {run.sessionTitle ?? run.taskBody}
+                        <TableCell className="max-w-[360px] font-medium" title={run.taskBody}>
+                          <div className="truncate">{run.sessionTitle ?? run.taskBody}</div>
+                          {run.latestAgentMessage && (
+                            <div className="truncate text-xs text-muted-foreground font-normal mt-0.5">
+                              {run.latestAgentMessage}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="font-mono text-xs">
                           @{run.agent?.alias ?? "unknown"}

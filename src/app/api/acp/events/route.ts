@@ -222,6 +222,17 @@ export async function POST(req: NextRequest) {
                 updateData.latestAgentMessage = body.latestAgentMessage.trim();
             }
 
+            // Auto-generate sessionTitle from taskBody on first session/new (if not already set)
+            if (eventType === "session/new" && !taskRun.sessionTitle) {
+                const raw = taskRun.taskBody.trim();
+                // Take first sentence/clause; fall back to raw truncation
+                const firstClause = raw.split(/[.!?\n]/)[0].trim();
+                const candidate = firstClause.length >= 4 ? firstClause : raw;
+                updateData.sessionTitle = candidate.length > 60
+                    ? candidate.slice(0, 57) + "..."
+                    : candidate;
+            }
+
             const updated = await prisma.taskRun.update({
                 where: { id: taskRun.id },
                 data: updateData,
@@ -236,6 +247,7 @@ export async function POST(req: NextRequest) {
                 totalActiveDuration: updated.totalActiveDuration,
                 totalWaitDuration: updated.totalWaitDuration,
                 latestAgentMessage: updated.latestAgentMessage,
+                sessionTitle: updated.sessionTitle ?? undefined,
             });
 
             logger.info(`ACP session ${eventType === "session/new" ? "started" : "prompting"}`, {
