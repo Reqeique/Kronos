@@ -15,6 +15,7 @@ Kronos is a scheduler/orchestration dashboard for running agent tasks through AC
 | Mentions (CLI) | Prompt mention preprocessing for `@...` paths | Implemented | Enabled by default, disable via `--no-mention-preprocess` |
 | Auth | Bridge token minting + alias-scoped worker auth | Implemented | Tokens issued via `/api/bridge/token` |
 | Observability | Real-time dashboard event stream | Implemented | SSE endpoint for task updates |
+| Observability | ACP session title display | Implemented | Automatically display agent-generated session title in place of task prompt in task lists and calendar views |
 
 ## Coming Soon
 
