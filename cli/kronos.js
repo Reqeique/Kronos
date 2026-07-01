@@ -463,6 +463,8 @@ async function runDrivenAcpSession({
                 // prompt() is fire-and-forget per the ACP SDK example
                 session.prompt(finalPrompt);
 
+                let accumulatedMessage = "";
+
                 for (;;) {
                     const message = await session.nextUpdate();
                     if (message.kind === "stop") break;
@@ -472,12 +474,13 @@ async function runDrivenAcpSession({
                         const updateType = update?.sessionUpdate || update?.type;
                         if (updateType === "agent_message_chunk" || updateType === "message_chunk") {
                             const text = update?.content?.text || (typeof update?.content === "string" ? update.content : "") || "";
-                            if (typeof text === "string" && text.trim()) {
+                            if (typeof text === "string" && text) {
+                                accumulatedMessage += text;
                                 handleParsedEvent({
                                     eventType: "session/prompt",
                                     sessionId,
                                     timestamp: new Date().toISOString(),
-                                    latestAgentMessage: text.trim(),
+                                    latestAgentMessage: accumulatedMessage.trim(),
                                 });
                             }
                         }
