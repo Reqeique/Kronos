@@ -676,6 +676,8 @@ async function commandWatchStdio(rawArgs) {
     const taskBodyOverride = typeof args["task-body-override"] === "string" ? args["task-body-override"] : undefined;
     const mentionPreprocessEnabled = !Boolean(args["no-mention-preprocess"]);
     const customCwd = typeof args.cwd === "string" ? args.cwd : (typeof args["work-dir"] === "string" ? args["work-dir"] : undefined);
+    const driveAcpAgentCommand = args.agent || config.agent || "opencode acp";
+    const verbose = Boolean(args.verbose);
 
     if (!alias) {
         console.error("Missing --alias <alias>.");
@@ -684,11 +686,6 @@ async function commandWatchStdio(rawArgs) {
     }
     if (!token) {
         console.error("Missing token. Use --token <token> or run `kronos login` first.");
-        process.exitCode = 1;
-        return;
-    }
-    if (driveAcp && !driveAcpAgentCommand) {
-        console.error("Missing --agent <\"command\"> for --drive-acp (or set KRONOS_ACP_AGENT_CMD).");
         process.exitCode = 1;
         return;
     }
@@ -1024,14 +1021,9 @@ async function commandProxy(rawArgs) {
     const alias = `${args.alias || ""}`.trim();
     const token = `${args.token || config.token || ""}`.trim();
     const server = normalizeServer(args.server || config.server);
-    const agentCmd = `${args.agent || ""}`.trim();
+    const agentCmd = `${args.agent || config.agent || "opencode acp"}`.trim();
     const verbose = Boolean(args.verbose);
 
-    if (!agentCmd) {
-        console.error("Missing --agent <command> e.g. --agent \"claude-code\"");
-        process.exitCode = 1;
-        return;
-    }
     if (!alias) {
         console.error("Missing --alias <alias>.");
         process.exitCode = 1;
