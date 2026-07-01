@@ -467,12 +467,11 @@ async function runDrivenAcpSession({
                     const message = await session.nextUpdate();
                     if (message.kind === "stop") break;
                     // Forward agent message chunks to the cloud
-                    if (message.kind === "notification") {
-                        const update = message.notification?.params?.update;
+                    if (message.kind === "session_update") {
+                        const update = message.update;
                         const updateType = update?.sessionUpdate || update?.type;
-                        log("[drive-acp] sessionUpdate:", updateType || "unknown");
                         if (updateType === "agent_message_chunk" || updateType === "message_chunk") {
-                            const text = update?.content?.text || update?.content || "";
+                            const text = update?.content?.text || (typeof update?.content === "string" ? update.content : "") || "";
                             if (typeof text === "string" && text.trim()) {
                                 handleParsedEvent({
                                     eventType: "session/prompt",
