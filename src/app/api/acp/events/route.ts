@@ -42,6 +42,8 @@ interface TaskRunWithAgent {
     pauseCount: number;
     totalWaitDuration: number;
     totalActiveDuration: number;
+    taskBody: string;
+    sessionTitle?: string | null;
     latestAgentMessage?: string | null;
     updatedAt: Date;
     agent: {

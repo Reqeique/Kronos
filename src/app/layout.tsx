@@ -15,6 +15,7 @@ import { Host_Grotesk } from "next/font/google";
 const hostGrotesk = Host_Grotesk({
     subsets: ["latin"],
     variable: "--font-sans",
+    preload: false,
 });
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
