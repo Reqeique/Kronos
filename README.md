@@ -35,9 +35,7 @@ npm run db:push
 npm run dev
 ```
 
-Open `http://localhost:3737/login` (the default port is `3737` — change with
-`KRONOS_PORT=<n>` env var, or pass `--port <n>` to `kronos up`), register an
-account, and sign in.
+Open `http://localhost:3737/login` (default port `3737`), register an account, and sign in.
 
 ## Dashboard Preview
 
@@ -53,28 +51,30 @@ account, and sign in.
 ## Real App Workflow
 
 1. Open `http://localhost:3737/dashboard`.
-2. Create an agent alias in **Settings** (example: `test`).
-3. In **Settings**, generate a bridge token.
-4. Save token/server locally with CLI:
+2. Register an agent alias in **Settings** (e.g. `oc`).
+3. Under **Bridge Tokens**, generate a token and copy it.
+4. Run the interactive TUI setup wizard:
 
 ```powershell
-node ./cli/kronos.js login --token <YOUR_TOKEN> --server http://localhost:3737
+npm run kronos setup
 ```
+The wizard will guide you to save the token and select your agent configuration.
 
-5. Start a queue worker for your alias:
+5. Boot the server and your agent in one command:
 
 ```powershell
-node ./cli/kronos.js watch-queue --alias test --agent "gemini.cmd --experimental-acp --yolo --model gemini-2.5-flash" --server http://localhost:3737 --verbose
+npm run kronos up -- --alias oc --verbose
 ```
+*(If you compiled the binary, you can run `./kronos setup` and `./kronos up` directly!)*
 
-6. Back in the dashboard, create a new task assigned to `@test`.
+6. Back in the dashboard, create a new task assigned to `@oc`.
    - In **Task Description**, type `@` to autocomplete project file paths.
 7. Task status flows in UI as lifecycle events arrive (`SCHEDULED` -> `DISPATCHED` -> `IN_PROGRESS` -> terminal status).
 
 ## ACP Notes
 
-- `watch-queue` continuously picks active tasks for the alias and forwards ACP lifecycle events to `/api/acp/events`.
-- `watch-queue` uses streamable HTTP queue delivery by default (`GET /api/bridge/tasks`).
+- `kronos up` / `kronos agent` continuously picks active tasks for the alias and forwards ACP lifecycle events to `/api/acp/events`.
+- Streamable HTTP queue delivery is used by default (`GET /api/bridge/tasks`).
 - Use `--queue-transport polling --poll-ms 3000` to force legacy polling mode.
 - Keep the watcher terminal running while tasks are being processed.
 - Use `watch-stdio` only if you are wiring your own ACP NDJSON stream manually.
