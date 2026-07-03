@@ -11,8 +11,30 @@ if (mode !== "dev" && mode !== "start") {
     process.exit(1);
 }
 
+const fs = require("node:fs");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
+
+const dbPath = path.join(__dirname, "..", "prisma", "dev.db");
+const dbExists = fs.existsSync(dbPath);
+const dbIsEmpty = dbExists && fs.statSync(dbPath).size === 0;
+
+if (!dbExists || dbIsEmpty) {
+    console.log("[kronos] SQLite database not found. Bootstrapping prisma/dev.db...");
+    const gen = spawnSync("npx", ["prisma", "generate"], { stdio: "inherit" });
+    if (gen.status !== 0) {
+        console.error("[kronos] prisma generate failed.");
+        process.exit(1);
+    }
+    const result = spawnSync("npx", ["prisma", "db", "push", "--accept-data-loss"], {
+        stdio: "inherit",
+    });
+    if (result.status !== 0) {
+        console.error("[kronos] Prisma database bootstrap failed.");
+    } else {
+        console.log("[kronos] Database bootstrap completed successfully.");
+    }
+}
 
 let nextBin;
 try {
