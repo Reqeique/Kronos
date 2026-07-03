@@ -21,12 +21,13 @@ const dbIsEmpty = dbExists && fs.statSync(dbPath).size === 0;
 
 if (!dbExists || dbIsEmpty) {
     console.log("[kronos] SQLite database not found. Bootstrapping prisma/dev.db...");
-    const gen = spawnSync("npx", ["prisma", "generate"], { stdio: "inherit" });
+    const prismaBin = path.join(__dirname, "..", "node_modules", "prisma", "build", "index.js");
+    const gen = spawnSync(process.execPath, [prismaBin, "generate"], { stdio: "inherit" });
     if (gen.status !== 0) {
         console.error("[kronos] prisma generate failed.");
         process.exit(1);
     }
-    const result = spawnSync("npx", ["prisma", "db", "push", "--accept-data-loss"], {
+    const result = spawnSync(process.execPath, [prismaBin, "db", "push", "--accept-data-loss"], {
         stdio: "inherit",
     });
     if (result.status !== 0) {
