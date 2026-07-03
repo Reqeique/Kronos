@@ -8,10 +8,10 @@
   },
   "scripts": {
     "kronos": "node ./cli/kronos.js",
-    "agent": "node ./cli/kronos.js watch-queue",
-    "dev": "next dev",
+    "setup": "node ./cli/kronos.js setup",
+    "dev": "node ./scripts/kronos-port.js dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node ./scripts/kronos-port.js start",
     "lint": "eslint src",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
@@ -21,10 +21,16 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "db:backup": "mkdir -Force backups; cp prisma/dev.db backups/dev.db.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+    "db:backup": "mkdir -Force backups; cp prisma/dev.db backups/dev.db.$(Get-Date -Format 'yyyyMMdd_HHmmss')",
+    "build:bin": "bun build --compile --external better-sqlite3 ./cli/kronos.js --outfile kronos",
+    "build:bin:win": "bun build --compile --target=bun-windows-x64 --external better-sqlite3 ./cli/kronos.js --outfile kronos.exe",
+    "build:bin:macos:arm64": "bun build --compile --target=bun-darwin-arm64 --external better-sqlite3 ./cli/kronos.js --outfile kronos",
+    "build:bin:macos:x64": "bun build --compile --target=bun-darwin-x64 --external better-sqlite3 ./cli/kronos.js --outfile kronos",
+    "build:bin:linux:x64": "bun build --compile --target=bun-linux-x64 --external better-sqlite3 ./cli/kronos.js --outfile kronos"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.1.0",
+    "@clack/prompts": "^1.6.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",

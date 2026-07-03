@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 import fs from "node:fs";
 import path from "node:path";
 
-const baseUrl = process.env.BASE_URL || "http://localhost:3000";
+const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.KRONOS_PORT || "3737"}`;
 const email = process.env.DEMO_EMAIL || "demo@example.com";
 const password = process.env.DEMO_PASSWORD || "password";
 const outDir = process.env.OUT_DIR || "docs/assets/screenshots";

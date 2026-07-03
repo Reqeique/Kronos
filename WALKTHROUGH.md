@@ -8,18 +8,18 @@ This walkthrough details the steps to set up, execute, and verify the Kronos age
    ```powershell
    npm run dev
    ```
-2. Navigate to `http://localhost:3000/settings` and register or log in.
+2. Navigate to `http://localhost:3737/settings` and register or log in.
 3. Under **Bridge Tokens**, generate a new token and copy it to your clipboard.
 4. Save the token locally:
    ```powershell
-   npm run kronos login -- --token <YOUR_COPIED_TOKEN> --server http://localhost:3000
+   npm run kronos login -- --token <YOUR_COPIED_TOKEN> --server http://localhost:3737
    ```
 
 ---
 
 ## 1. Scheduling a Task from the Website
 
-1. Navigate to the dashboard at `http://localhost:3000/dashboard`.
+1. Navigate to the dashboard at `http://localhost:3737/dashboard`.
 2. Click **+ New Task** to open the creation dialog.
 3. Select an agent alias (e.g., `@oc`).
 4. Input a prompt (e.g., `"Name the first capital city in North America. Answer in one sentence."`).

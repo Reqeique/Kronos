@@ -165,9 +165,9 @@ describe('config functions', () => {
 
 describe('normalizeServer', () => {
     it('should return default server if input is null or empty', () => {
-        expect(normalizeServer(null)).toBe('http://localhost:3000');
-        expect(normalizeServer('')).toBe('http://localhost:3000');
-        expect(normalizeServer(undefined)).toBe('http://localhost:3000');
+        expect(normalizeServer(null)).toBe('http://localhost:3737');
+        expect(normalizeServer('')).toBe('http://localhost:3737');
+        expect(normalizeServer(undefined)).toBe('http://localhost:3737');
     });
 
     it('should trim whitespace and remove trailing slashes', () => {

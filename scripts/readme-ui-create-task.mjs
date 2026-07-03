@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const baseUrl = process.env.BASE_URL || "http://localhost:3000";
+const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.KRONOS_PORT || "3737"}`;
 const email = process.env.USER_EMAIL;
 const password = process.env.USER_PASSWORD;
 const agentAlias = process.env.AGENT_ALIAS;

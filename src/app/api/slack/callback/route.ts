@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
             client_id: process.env.SLACK_CLIENT_ID ?? "",
             client_secret: process.env.SLACK_CLIENT_SECRET ?? "",
             code,
-            redirect_uri: process.env.SLACK_REDIRECT_URI ?? "http://localhost:3000/api/slack/callback",
+            redirect_uri: process.env.SLACK_REDIRECT_URI ?? "http://localhost:3737/api/slack/callback",
         }),
     });
 

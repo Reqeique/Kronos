@@ -87,7 +87,7 @@ export function buildSlackInstallUrl(state: string): string {
     const params = new URLSearchParams({
         client_id: process.env.SLACK_CLIENT_ID ?? "",
         scope: "chat:write,reactions:read,channels:read,im:write,channels:history",
-        redirect_uri: process.env.SLACK_REDIRECT_URI ?? "http://localhost:3000/api/slack/callback",
+        redirect_uri: process.env.SLACK_REDIRECT_URI ?? "http://localhost:3737/api/slack/callback",
         state,
     });
     return `https://slack.com/oauth/v2/authorize?${params.toString()}`;

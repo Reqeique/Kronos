@@ -35,7 +35,9 @@ npm run db:push
 npm run dev
 ```
 
-Open `http://localhost:3000/login`, register an account, and sign in.
+Open `http://localhost:3737/login` (the default port is `3737` — change with
+`KRONOS_PORT=<n>` env var, or pass `--port <n>` to `kronos up`), register an
+account, and sign in.
 
 ## Dashboard Preview
 
@@ -50,19 +52,19 @@ Open `http://localhost:3000/login`, register an account, and sign in.
 
 ## Real App Workflow
 
-1. Open `http://localhost:3000/dashboard`.
+1. Open `http://localhost:3737/dashboard`.
 2. Create an agent alias in **Settings** (example: `test`).
 3. In **Settings**, generate a bridge token.
 4. Save token/server locally with CLI:
 
 ```powershell
-node ./cli/kronos.js login --token <YOUR_TOKEN> --server http://localhost:3000
+node ./cli/kronos.js login --token <YOUR_TOKEN> --server http://localhost:3737
 ```
 
 5. Start a queue worker for your alias:
 
 ```powershell
-node ./cli/kronos.js watch-queue --alias test --agent "gemini.cmd --experimental-acp --yolo --model gemini-2.5-flash" --server http://localhost:3000 --verbose
+node ./cli/kronos.js watch-queue --alias test --agent "gemini.cmd --experimental-acp --yolo --model gemini-2.5-flash" --server http://localhost:3737 --verbose
 ```
 
 6. Back in the dashboard, create a new task assigned to `@test`.

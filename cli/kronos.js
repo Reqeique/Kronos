@@ -5,33 +5,67 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const { Readable, Writable } = require("node:stream");
 const { setTimeout: sleep } = require("node:timers/promises");
-const BetterSqlite3 = require("better-sqlite3");
 
-const DEFAULT_SERVER = process.env.KRONOS_API_BASE_URL || "http://localhost:3000";
+// Port preference: 3737 is the Kronos-themed default and avoids the popular
+// 3000 port (which collides with React/Next/Rails dev servers). Keep these
+// three constants together so discovery, fallback, and the CLI/server agree.
+const DEFAULT_PORT = 3737;
+const FALLBACK_PORTS = [3737, 7766, 8789];
+
+function defaultServer() {
+    const envPort = `${process.env.KRONOS_PORT || ""}`.trim();
+    const envBase = `${process.env.KRONOS_API_BASE_URL || ""}`.trim();
+    if (envBase) return envBase;
+    if (envPort && /^\d+$/.test(envPort)) return `http://localhost:${envPort}`;
+    return `http://localhost:${DEFAULT_PORT}`;
+}
+
+const DEFAULT_SERVER = defaultServer();
 const CONFIG_DIR = path.join(os.homedir(), ".kronos");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
+
+const DEFAULTS = {
+    server: DEFAULT_SERVER,
+    port: DEFAULT_PORT,
+    agent: process.env.KRONOS_ACP_AGENT_CMD || "opencode acp",
+    alias: process.env.KRONOS_BRIDGE_ALIAS || "",
+};
 
 function printHelp() {
     console.log(`kronos CLI
 
 Usage:
+  kronos                                  shows this help
+  kronos up [--server <url>] [--alias <a>] [--dev]   boot dev/start server + run agent
+  kronos serve [--server <url>] [--dev]    boot dev/start server and block
+  kronos down                             stop a dev server spawned by this CLI
+  kronos setup                            launches the interactive TUI wizard
   kronos login --token <token> [--server <url>]
-  kronos proxy --agent <"command"> --alias <alias> [--token <token>] [--server <url>]
-  kronos watch-stdio --alias <alias> [--token <token>] [--server <url>] [--drive-acp] [--agent <"command">] [--cwd <path>]
-  kronos watch-queue --alias <alias> [--token <token>] [--server <url>] --agent <"command"> [--queue-transport <streamable-http|polling>] [--poll-ms <n>] [--no-mention-preprocess] [--cwd <path>]
+  kronos proxy --agent <"command"> --alias <alias> [--token <token>] [--server <url>] [--dev]
+  kronos watch-stdio --alias <alias> [--token <token>] [--server <url>] [--drive-acp] [--agent <"command">] [--cwd <path>] [--dev]
+  kronos agent --alias <alias> [--token <token>] [--server <url>] [--agent <"command">] [--queue-transport <streamable-http|polling>] [--poll-ms <n>] [--no-mention-preprocess] [--cwd <path>] [--dev]
+  kronos
 
 Notes:
-  - login stores token/server in ~/.kronos/config.json
-  - proxy spawns an agent as a subprocess and taps its stdio layer transparently
-  - watch-stdio reads ACP NDJSON events from stdin and forwards to /api/acp/events
+  - The Next.js dev server is auto-bootstrapped by any server-touching command
+    (setup / agent / watch-stdio / proxy / up / serve) if it is not already
+    reachable. CLI auto-detects the kronos checkout via cwd, KRONOS_INSTALL_DIR,
+    or the binary's own folder.
+  - Bootstrap runner: \`bun\` (preferred) when present, otherwise \`npm\`.
+  - Bootstrap mode: \`prod\` (default; auto-builds if .next/ missing, then runs
+    \`start\`) or \`dev\` (pass --dev to use \`next dev\`).
+  - setup          launches the interactive TUI wizard (token/server/alias/agent)
+  - login          stores token/server in ~/.kronos/config.json
+  - proxy          spawns an agent as a subprocess and taps its stdio layer transparently
+  - watch-stdio    reads ACP NDJSON events from stdin and forwards to /api/acp/events
   - watch-stdio --drive-acp runs an ACP client loop against --agent and forwards lifecycle events
-  - watch-queue is a persistent task consumer (streamable-http by default; polling optional)
-  - by default, @file mentions in task prompts are autocompleted to project paths before sending to ACP
+  - agent          persistent task consumer (alias for watch-queue --drive-acp --continuous)
   - token can be provided by --token or saved via login
   - The --cwd option (or --work-dir) changes the directory used for mention resolution and agent execution (defaults to process.cwd())
+  - Pass --no-server to any server-touching command to skip auto-bootstrap.
 `);
 }
 
@@ -57,6 +91,34 @@ function parseArgs(args) {
         }
     }
     return out;
+}
+
+function resolveServerMode(args, rawArgs) {
+    const findFlag = (flag) => Array.isArray(rawArgs) && rawArgs.indexOf(flag) !== -1;
+    if (findFlag("--dev")) return "dev";
+    if (findFlag("--prod")) return "prod";
+    if (Array.isArray(rawArgs)) {
+        const modeIdx = rawArgs.indexOf("--mode");
+        if (modeIdx !== -1 && rawArgs[modeIdx + 1]) {
+            const v = `${rawArgs[modeIdx + 1]}`.toLowerCase();
+            if (v === "dev" || v === "development") return "dev";
+            if (v === "prod" || v === "production") return "prod";
+        }
+    }
+    const modeFlag = typeof args?.mode === "string" ? args.mode.toLowerCase() : "";
+    if (modeFlag === "dev" || modeFlag === "development") return "dev";
+    if (modeFlag === "prod" || modeFlag === "production") return "prod";
+    return "prod";
+}
+
+function resolveServer(args, positional, fallback) {
+    if (typeof args.server === "string") return normalizeServer(args.server);
+    if (typeof positional === "string" && positional) return normalizeServer(positional);
+    const portRaw = typeof args.port === "string" || typeof args.port === "number"
+        ? `${args.port}`.trim()
+        : "";
+    if (portRaw && /^\d{2,5}$/.test(portRaw)) return `http://localhost:${portRaw}`;
+    return normalizeServer(fallback || DEFAULTS.server);
 }
 
 function readConfig() {
@@ -333,7 +395,7 @@ ${summaryLines.join("\n")}`;
     return { prompt, resolvedCount: resolutions.size };
 }
 
-function fetchPendingTaskForAlias(alias, dbPathInput, currentDir) {
+function fetchPendingTaskForAliasSync(BetterSqlite3, alias, dbPathInput, currentDir) {
     const dbPath = dbPathInput ? path.resolve(dbPathInput) : path.join(currentDir || process.cwd(), "prisma", "dev.db");
     if (!fs.existsSync(dbPath)) {
         throw new Error(`SQLite DB not found at ${dbPath}`);
@@ -368,6 +430,30 @@ LIMIT 1;`;
     }
 }
 
+async function fetchPendingTaskForAlias(alias, dbPathInput, currentDir) {
+    // Build the native module id at runtime so the bundler (bun) leaves it external.
+    // better-sqlite3 is a native binding and must never be inlined into a binary.
+    const moduleId = ["better", "sqlite3"].join("-");
+
+    let BetterSqlite3;
+    try {
+        const mod = await import(moduleId);
+        // better-sqlite3 is a CommonJS module that exports the class directly;
+        // dynamic import wraps CJS exports under `default`.
+        BetterSqlite3 = mod.default ?? mod;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Failed to load better-sqlite3 native module. ` +
+            `If you are running a bun-compiled kronos binary, the --db-path option requires ` +
+            `placing 'better-sqlite3' in a node_modules folder next to the binary, or ` +
+            `running the kronos CLI via 'node ./cli/kronos.js' / 'npx kronos'. Original error: ${message}`,
+        );
+    }
+
+    return fetchPendingTaskForAliasSync(BetterSqlite3, alias, dbPathInput, currentDir);
+}
+
 async function runDrivenAcpSession({
     alias,
     agentCommand,
@@ -381,7 +467,7 @@ async function runDrivenAcpSession({
     const rootDir = cwd ? path.resolve(cwd) : process.cwd();
     const taskBody = typeof taskBodyOverride === "string"
         ? taskBodyOverride.trim()
-        : fetchPendingTaskForAlias(alias, dbPath, rootDir);
+        : await fetchPendingTaskForAlias(alias, dbPath, rootDir);
     if (!taskBody) {
         throw new Error(`No active task found for @${alias}`);
     }
@@ -613,6 +699,743 @@ async function promptToken() {
     return `${token}`.trim();
 }
 
+// ------------------------------------------------------------------------
+// TUI Setup Wizard (powered by @clack/prompts)
+// ------------------------------------------------------------------------
+async function loadClackPrompts() {
+    try {
+        // @clack/prompts is pure ESM, dynamic import works in Node CJS + bun binary
+        const mod = await import("@clack/prompts");
+        return mod.default ?? mod;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Missing @clack/prompts dependency. Install with: npm i @clack/prompts. Original error: ${message}`,
+        );
+    }
+}
+
+// ------------------------------------------------------------------------
+// Self-managed dev server: lets the CLI boot `npm start` (or `bun run start`)
+// on demand so the user doesn't have to manually start the web server in
+// another terminal.
+// ------------------------------------------------------------------------
+let spawnedDevServer = null;
+let spawnedDir = null;
+let spawnedRunner = null;
+let spawnedPort = null;
+
+let cachedPackageRunner = null;
+function detectPackageRunner() {
+    if (cachedPackageRunner !== null) return cachedPackageRunner;
+    const probe = (cmd) => {
+        try {
+            const out = spawnSync(cmd, ["--version"], { stdio: "pipe", windowsHide: true });
+            return out.status === 0;
+        } catch {
+            return false;
+        }
+    };
+    if (probe("bun")) cachedPackageRunner = "bun";
+    else if (probe("npm")) cachedPackageRunner = "npm";
+    else cachedPackageRunner = null;
+    return cachedPackageRunner;
+}
+
+function runRunner(args, cwd, log) {
+    const runner = detectPackageRunner();
+    if (!runner) {
+        throw new Error(
+            "Neither `bun` nor `npm` was found on PATH. Install one to auto-bootstrap the dev server.",
+        );
+    }
+    log?.(`[kronos] $ ${runner} ${args.join(" ")}  (cwd=${cwd})`);
+    const useShell = process.platform === "win32";
+    return spawn(runner, args, {
+        cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+        shell: useShell,
+        windowsHide: true,
+    });
+}
+
+function runRunnerAwait(args, cwd, log) {
+    return new Promise((resolve, reject) => {
+        const child = runRunner(args, cwd, log);
+        child.stdout.on("data", (chunk) => {
+            const text = `${chunk}`.replace(/\r/g, "");
+            for (const line of text.split("\n")) {
+                if (line.trim()) log?.(`[dev] ${line.trim()}`);
+            }
+        });
+        child.stderr.on("data", (chunk) => {
+            const text = `${chunk}`.replace(/\r/g, "");
+            for (const line of text.split("\n")) {
+                if (line.trim()) log?.(`[dev] ${line.trim()}`);
+            }
+        });
+        child.on("error", (err) => reject(err));
+        child.on("exit", (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`${detectPackageRunner()} ${args.join(" ")} exited with code ${code}`));
+        });
+    });
+}
+
+function isKronosCheckout(dir) {
+    if (!dir) return false;
+    try {
+        const pkgPath = path.join(dir, "package.json");
+        if (!fs.existsSync(pkgPath)) return false;
+        const data = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+        return data?.name === "kronos";
+    } catch {
+        return false;
+    }
+}
+
+function findKronosCheckout() {
+    const seen = new Set();
+    const walkUp = (dir) => {
+        if (!dir || seen.has(dir)) return null;
+        seen.add(dir);
+        if (isKronosCheckout(dir)) return dir;
+        const parent = path.dirname(dir);
+        if (parent === dir) return null;
+        return walkUp(parent);
+    };
+
+    const fromCwd = walkUp(process.cwd());
+    if (fromCwd) return fromCwd;
+
+    if (process.env.KRONOS_INSTALL_DIR) {
+        const env = path.resolve(process.env.KRONOS_INSTALL_DIR);
+        if (isKronosCheckout(env)) return env;
+    }
+
+    const argv1 = process.argv[1] || "";
+    const binDir = argv1 ? path.dirname(path.resolve(argv1)) : "";
+    if (binDir) {
+        const fromBin = walkUp(binDir);
+        if (fromBin) return fromBin;
+    }
+
+    return null;
+}
+
+async function isServerReachable(serverUrl) {
+    if (!serverUrl) return false;
+    try {
+        const url = `${normalizeServer(serverUrl)}/api/health`.replace("localhost", "127.0.0.1");
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 2500);
+        try {
+            const res = await fetch(url, { method: "GET", signal: controller.signal });
+            return res.status < 600;
+        } finally {
+            clearTimeout(t);
+        }
+    } catch {
+        return false;
+    }
+}
+
+function extractPort(serverUrl) {
+    if (!serverUrl) return null;
+    const m = `${serverUrl}`.match(/:(\d{2,5})(?:\/|$)/);
+    return m ? Number(m[1]) : null;
+}
+
+function withPort(serverUrl, port) {
+    try {
+        const u = new URL(serverUrl);
+        u.port = String(port);
+        return u.toString().replace(/\/+$/, "");
+    } catch {
+        return `http://localhost:${port}`;
+    }
+}
+
+function isPortInUse(port) {
+    if (!port) return false;
+    const probe = (host) => {
+        try {
+            const out = spawnSync(process.platform === "win32" ? "powershell" : "bash",
+                process.platform === "win32"
+                    ? ["-NoProfile", "-Command", `(Test-NetConnection -ComputerName ${host} -Port ${port} -WarningAction SilentlyContinue -InformationLevel Quiet) 2>$null`]
+                    : ["-c", `(echo >/dev/tcp/${host}/${port}) 2>/dev/null && echo open || echo closed`],
+                { stdio: "pipe", windowsHide: true });
+            if (process.platform !== "win32") {
+                return `${out.stdout || ""}`.trim() === "open";
+            }
+            return out.status === 0;
+        } catch {
+            return false;
+        }
+    };
+    return probe("127.0.0.1") || probe("localhost");
+}
+
+async function pickFreePort(preferred, log) {
+    if (typeof preferred !== "number" || !Number.isFinite(preferred)) preferred = DEFAULT_PORT;
+    const candidates = [...new Set([preferred, ...FALLBACK_PORTS])];
+    for (const port of candidates) {
+        const reachableAlready = await isServerReachable(`http://127.0.0.1:${port}`).catch(() => false);
+        if (reachableAlready) continue;
+        if (isPortInUse(port)) continue;
+        if (port !== preferred) {
+            log?.(`[kronos] port ${preferred} busy, switching to ${port}.`);
+        }
+        return port;
+    }
+    log?.(`[kronos] all candidate ports occupied; using ${preferred} anyway and hoping the kernel/launchd tells us later.`);
+    return preferred;
+}
+
+function killSpawnedDevServer() {
+    if (spawnedDevServer && !spawnedDevServer.killed && spawnedDevServer.exitCode === null) {
+        try {
+            if (process.platform === "win32") {
+                spawn("taskkill", ["/pid", String(spawnedDevServer.pid), "/f", "/t"], {
+                    detached: true,
+                    stdio: "ignore",
+                }).unref();
+            } else {
+                spawnedDevServer.kill("SIGTERM");
+                setTimeout(() => {
+                    try { spawnedDevServer.kill("SIGKILL"); } catch { /* ignore */ }
+                }, 5_000).unref();
+            }
+        } catch {
+            // ignore
+        }
+    }
+}
+
+process.on("exit", killSpawnedDevServer);
+process.on("SIGINT", () => {
+    killSpawnedDevServer();
+    if (process.listenerCount("SIGINT") <= 1) {
+        process.exit(130);
+    }
+});
+process.on("SIGTERM", () => {
+    killSpawnedDevServer();
+    if (process.listenerCount("SIGTERM") <= 1) {
+        process.exit(143);
+    }
+});
+
+async function ensureServerRunning({ server, log, mode = "prod", pollMs = 1500, timeoutMs = 90_000 } = {}) {
+    const target = normalizeServer(server);
+    if (!target || target === "off") return { spawned: false, alreadyRunning: false, skipped: true };
+
+    if (await isServerReachable(target)) {
+        return { spawned: false, alreadyRunning: true, server: target };
+    }
+
+    const runner = detectPackageRunner();
+    if (!runner) {
+        return {
+            spawned: false,
+            alreadyRunning: false,
+            error: "no-runner",
+            message: "Neither `bun` nor `npm` was found on PATH. Install one (or pass --no-server).",
+        };
+    }
+
+    const checkout = findKronosCheckout();
+    if (!checkout) {
+        return {
+            spawned: false,
+            alreadyRunning: false,
+            error: "no-checkout",
+            message: "No Kronos checkout found. Place the kronos CLI in a folder with package.json (name=\"kronos\") or set KRONOS_INSTALL_DIR.",
+        };
+    }
+
+    let startChild;
+    try {
+        const requestedPort = extractPort(target);
+        const effectivePort = await pickFreePort(requestedPort, log);
+        const nextServer = requestedPort && requestedPort !== effectivePort
+            ? withPort(target, effectivePort)
+            : target;
+        spawnedPort = effectivePort;
+        spawnedDir = checkout;
+        spawnedRunner = runner;
+
+        const portArgs = mode === "dev"
+            ? ["run", "dev", "--", "--port", String(effectivePort)]
+            : ["run", "start", "--", "--port", String(effectivePort)];
+
+        if (mode === "dev") {
+            log?.(`[kronos] spawning \`${runner} ${portArgs.join(" ")}\` in ${checkout}...`);
+            startChild = runRunner(portArgs, checkout, log);
+        } else {
+            const hasBuild = fs.existsSync(path.join(checkout, ".next"));
+            if (!hasBuild) {
+                log?.(`[kronos] no .next/ build detected — running \`${runner} run build\` first...`);
+                await runRunnerAwait(["run", "build"], checkout, log);
+            } else {
+                log?.(`[kronos] using existing .next/ build...`);
+            }
+            log?.(`[kronos] spawning \`${runner} ${portArgs.join(" ")}\` in ${checkout}...`);
+            startChild = runRunner(portArgs, checkout, log);
+        }
+
+        spawnedDevServer = startChild;
+        startChild.stdout.on("data", (chunk) => {
+            const text = `${chunk}`.replace(/\r/g, "");
+            for (const line of text.split("\n")) {
+                const trimmed = line.trim();
+                if (trimmed) log?.(`[dev] ${trimmed}`);
+            }
+        });
+        startChild.stderr.on("data", (chunk) => {
+            const text = `${chunk}`.replace(/\r/g, "");
+            for (const line of text.split("\n")) {
+                const trimmed = line.trim();
+                if (trimmed) log?.(`[dev] ${trimmed}`);
+            }
+        });
+        startChild.on("error", (err) => log?.(`[dev] error: ${err.message}`));
+
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+            await sleep(pollMs);
+            if (await isServerReachable(nextServer)) {
+                log?.(`[kronos] dev server up at ${nextServer} (via ${runner}).`);
+                return { spawned: true, alreadyRunning: false, checkout, server: nextServer, runner, pid: startChild.pid, port: effectivePort };
+            }
+            if (startChild.exitCode !== null) {
+                return {
+                    spawned: false,
+                    alreadyRunning: false,
+                    error: `dev-server-exit-${startChild.exitCode}`,
+                    checkout,
+                    runner,
+                    port: effectivePort,
+                    message: `\`${runner} ${portArgs.join(" ")}\` exited with code ${startChild.exitCode} before reaching ${nextServer}. Use --port <p> or set KRONOS_PORT to pick a different port.`,
+                };
+            }
+        }
+        return {
+            spawned: false,
+            alreadyRunning: false,
+            error: "timeout",
+            checkout,
+            runner,
+            port: effectivePort,
+            message: `\`${runner} ${portArgs.join(" ")}\` did not respond at ${nextServer} within ${Math.round(timeoutMs / 1000)}s.`,
+        };
+    } catch (error) {
+        return {
+            spawned: false,
+            alreadyRunning: false,
+            error: "build-failed",
+            checkout,
+            message: error instanceof Error ? error.message : String(error),
+        };
+    }
+}
+
+async function promptWithDefault(prompts, key, existing, fallback, message) {
+    const initial = (existing && existing[key]) || fallback;
+    const response = await prompts.text({
+        message,
+        initialValue: initial,
+        placeholder: `${initial}`,
+    });
+    if (prompts.isCancel(response)) return null;
+    if (response === undefined || response === null || `${response}`.length === 0) return initial;
+    return `${response}`.trim() || initial;
+}
+
+function sanitiseAlias(input) {
+    return `${input || ""}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 32);
+}
+
+function openUrl(url) {
+    try {
+        let child;
+        if (process.platform === "win32") {
+            child = spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" });
+        } else if (process.platform === "darwin") {
+            child = spawn("open", [url], { detached: true, stdio: "ignore" });
+        } else {
+            child = spawn("xdg-open", [url], { detached: true, stdio: "ignore" });
+        }
+        if (child && typeof child.unref === "function") child.unref();
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function probeServer(prompts, serverInput) {
+    const server = normalizeServer(serverInput);
+    const spinner = prompts.spinner();
+    spinner.start(`Probing ${server}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    try {
+        const healthEndpoint = `${server}/api/health`.replace("localhost", "127.0.0.1");
+        try {
+            const res = await fetch(healthEndpoint, { method: "GET", signal: controller.signal });
+            if (res.ok) {
+                spinner.stop("Server reachable ✅");
+                return { ok: true };
+            }
+            spinner.stop(`Reachable but HTTP ${res.status}`);
+            return { ok: false, status: res.status };
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            spinner.stop(`Could not reach ${server} (${msg}). Start it with \`npm run dev\` if you want jobs delivered.`);
+            return { ok: false, error: msg };
+        }
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+async function fetchAgentAliases({ server, token }) {
+    if (!server || !token) return { ok: false, aliases: [], reason: "missing-token" };
+    const endpoint = `${normalizeServer(server)}/api/bridge/agents?token=${encodeURIComponent(token)}`.replace("localhost", "127.0.0.1");
+    try {
+        const res = await fetch(endpoint, { method: "GET" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            return { ok: false, aliases: [], errors: [data?.error?.message || `HTTP ${res.status}`] };
+        }
+        if (Array.isArray(data?.data)) {
+            return { ok: true, aliases: data.data };
+        }
+        if (Array.isArray(data?.data?.agents)) {
+            return { ok: true, aliases: data.data.agents };
+        }
+        return { ok: true, aliases: [] };
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { ok: false, aliases: [], errors: [message] };
+    }
+}
+
+async function ensureAgentAlias({ server, token, alias, name }) {
+    if (!server || !token || !alias) {
+        return { ok: false, errors: ["missing-credentials"] };
+    }
+    const endpoint = `${normalizeServer(server)}/api/bridge/agents`.replace("localhost", "127.0.0.1");
+    try {
+        const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+                alias,
+                name: name || alias,
+                agentType: "CUSTOM",
+                connectionTier: "WEBHOOK",
+            }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data?.success === false) {
+            return { ok: false, errors: [data?.error?.message || `HTTP ${res.status}`] };
+        }
+        return { ok: true, agent: data.data, alreadyExisted: Boolean(data.data?.alreadyExisted) };
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { ok: false, errors: [message] };
+    }
+}
+
+async function pickAlias(prompts, existingAlias, fetchedAliases) {
+    if (fetchedAliases.length > 0) {
+        const choices = fetchedAliases.map((a) => ({
+            value: a.alias,
+            label: `@${a.alias}${a.name ? ` — ${a.name}` : ""}`,
+        }));
+        choices.push({ value: "__new__", label: "+ Enter a different / new alias..." });
+        const initial = choices.find((c) => c.value === existingAlias)?.value || choices[0].value;
+        const picked = await prompts.select({
+            message: "Pick the alias to run",
+            initialValue: initial,
+            options: choices,
+        });
+        if (prompts.isCancel(picked)) return null;
+        if (picked === "__new__") return "__new__";
+        return picked;
+    }
+    const v = await prompts.text({
+        message: "Agent alias to run (must match Settings → Create Agent)",
+        initialValue: existingAlias,
+        placeholder: existingAlias || "my-agent",
+    });
+    if (prompts.isCancel(v)) return null;
+    return `${v ?? ""}`.trim() || existingAlias;
+}
+
+async function commandSetup(rawArgs) {
+    const args = parseArgs(rawArgs);
+    if (args.help || args.h) {
+        console.log(`kronos setup
+
+Interactive TUI wizard to configure Kronos bridge credentials and defaults.
+Saves everything to ${CONFIG_FILE}. Works with both the node CLI and bun-compiled binaries.
+
+Options:
+  --non-interactive  exit if the input is not a TTY (use login --token instead)
+`);
+        return;
+    }
+
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        console.error(
+            "`kronos setup` requires an interactive terminal. " +
+            "Use `kronos login --token <token>` for non-interactive use.",
+        );
+        process.exitCode = 1;
+        return;
+    }
+
+    const prompts = await loadClackPrompts();
+    const existing = readConfig();
+
+    const currentServer = resolveServer(parseArgs(rawArgs), undefined, existing.server || DEFAULTS.server);
+    if (!rawArgs.includes("--no-server")) {
+        const setupArgs = parseArgs(rawArgs);
+        const ensure = await ensureServerRunning({
+            server: currentServer,
+            mode: resolveServerMode(setupArgs, rawArgs),
+            log: (m) => process.stderr.write(`${m}\n`),
+        });
+        if (ensure.error) {
+            process.stderr.write(`[kronos] ${ensure.message || ensure.error}\n`);
+        } else if (ensure.spawned) {
+            process.stderr.write(`[kronos] dev server up at ${ensure.server}.\n`);
+        } else if (ensure.alreadyRunning) {
+            process.stderr.write(`[kronos] using existing server at ${ensure.server}.\n`);
+        }
+    }
+
+    prompts.intro("🕰️  Kronos — bridge setup");
+
+    const mode = await prompts.select({
+        message: "What do you want to configure?",
+        initialValue: "full",
+        options: [
+            { label: "Full setup (server, agent, alias, token)", value: "full" },
+            { label: "Save / rotate bridge token only", value: "token" },
+            { label: "Re-pick the agent command", value: "agent" },
+            { label: "Re-pick the server URL", value: "server" },
+            { label: "Show current config", value: "show" },
+            { label: "Cancel", value: "cancel" },
+        ],
+    });
+
+    if (prompts.isCancel(mode) || mode === "cancel") {
+        prompts.cancel("Setup cancelled.");
+        return;
+    }
+
+    if (mode === "show") {
+        const clean = { ...existing };
+        if (clean.token) clean.token = `${clean.token.slice(0, 4)}…(redacted)`;
+        prompts.note(JSON.stringify(clean, null, 2), "Current ~/.kronos/config.json");
+        prompts.outro("Done.");
+        return;
+    }
+
+    const next = { ...existing };
+
+    // ---------- 1. Server URL (always persisted, even on Enter-default) ----------
+    if (mode === "server" || mode === "full") {
+        const v = await promptWithDefault(
+            prompts,
+            "server",
+            existing,
+            normalizeServer(DEFAULTS.server),
+            "Kronos server URL",
+        );
+        if (v === null) { prompts.cancel("Setup cancelled."); return; }
+        next.server = normalizeServer(v);
+    }
+    if (next.server === undefined) next.server = normalizeServer(DEFAULTS.server);
+
+    // ---------- 2. Agent command (always persisted) ----------
+    if (mode === "agent" || mode === "full") {
+        const v = await promptWithDefault(
+            prompts,
+            "agent",
+            existing,
+            DEFAULTS.agent,
+            "Default ACP agent command (used by `kronos agent`)",
+        );
+        if (v === null) { prompts.cancel("Setup cancelled."); return; }
+        next.agent = v;
+    }
+    if (next.agent === undefined) next.agent = DEFAULTS.agent;
+
+    // ---------- 3. Probe the server (so we know where to point the browser) ----------
+    await probeServer(prompts, next.server);
+
+    // ---------- 4. Open dashboard to /settings so the user can sign in & generate token ----------
+    if (mode === "full" || mode === "token") {
+        const settingsUrl = `${normalizeServer(next.server)}/settings`;
+        prompts.note(
+            `Open ${settingsUrl} in your browser to:
+  • Sign in if you haven't already
+  • Click "Generate" under "Bridge Token"  (the value appears in the input box)
+  • Click "Create Agent" if your alias doesn't exist yet`,
+            "Need a token?",
+        );
+
+        const wantsOpen = await prompts.confirm({
+            message: `Open ${settingsUrl} in your browser now?`,
+            initialValue: true,
+        });
+        if (prompts.isCancel(wantsOpen)) {
+            prompts.cancel("Setup cancelled.");
+            return;
+        }
+
+        if (wantsOpen) {
+            const ok = openUrl(settingsUrl);
+            if (ok) {
+                prompts.log.info("Browser opened. Generate the token, then paste it below.");
+            } else {
+                prompts.log.warn(`Couldn't auto-open the browser. Open ${settingsUrl} manually.`);
+            }
+        }
+    }
+
+    // ---------- 5. Collect the bridge token ----------
+    if (mode === "full" || mode === "token") {
+        const wasEmpty = !existing.token;
+        const tokenPrompt = await prompts.password({
+            message: wasEmpty
+                ? "Bridge token (from Settings → Generate)"
+                : "New bridge token (leave blank to keep existing)",
+            validate: (value) => {
+                if (mode === "token" && !value) return "Bridge token is required.";
+                if (!value) return undefined;
+                if (value.trim().length < 8) return "Token looks too short — paste the full token.";
+                return undefined;
+            },
+        });
+        if (prompts.isCancel(tokenPrompt)) { prompts.cancel("Setup cancelled."); return; }
+        const trimmed = `${tokenPrompt ?? ""}`.trim();
+        if (trimmed) {
+            next.token = trimmed;
+        } else if (mode === "token") {
+            prompts.cancel("No token provided.");
+            return;
+        }
+    }
+
+    // ---------- 6. Pick or create the alias ----------
+    if (mode === "full") {
+        const fetched = next.token && next.server
+            ? await fetchAgentAliases({ server: next.server, token: next.token })
+            : { ok: false, aliases: [] };
+        if (fetched.errors && fetched.errors.length > 0) {
+            prompts.log.warn(`Couldn't fetch existing aliases: ${fetched.errors.join("; ")}`);
+        }
+        const choice = await pickAlias(prompts, next.alias || existing.alias, fetched.aliases || []);
+        if (choice === null) { prompts.cancel("Setup cancelled."); return; }
+        if (choice === "__new__") {
+            const v = await prompts.text({
+                message: "New alias @handle (must match Settings → Create Agent)",
+                placeholder: next.alias || "my-agent",
+            });
+            if (prompts.isCancel(v)) { prompts.cancel("Setup cancelled."); return; }
+            next.alias = sanitiseAlias(v);
+        } else {
+            next.alias = choice;
+        }
+
+        if (!next.alias || !/^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$/.test(next.alias)) {
+            const sanitised = sanitiseAlias(next.alias);
+            if (!sanitised) { prompts.cancel("Invalid alias."); return; }
+            next.alias = sanitised;
+        }
+
+        // Attempt auto-create via the bridge-token-authenticated endpoint
+        if (next.token && next.server) {
+            const known = (fetched.aliases || []).some((a) => a.alias === next.alias);
+            if (!known) {
+                const confirmCreate = await prompts.confirm({
+                    message: `Create @${next.alias} on ${normalizeServer(next.server)} now?`,
+                    initialValue: true,
+                });
+                if (!prompts.isCancel(confirmCreate) && confirmCreate) {
+                    const result = await ensureAgentAlias({
+                        server: next.server,
+                        token: next.token,
+                        alias: next.alias,
+                    });
+                    if (result.ok) {
+                        if (result.alreadyExisted) {
+                            prompts.log.success(`@${next.alias} already exists on the server.`);
+                        } else {
+                            prompts.log.success(`Created @${next.alias} on the server.`);
+                        }
+                    } else {
+                        prompts.log.warn(
+                            `Couldn't auto-create @${next.alias} (${result.errors?.join("; ") || "unknown error"}). ` +
+                            `Open ${normalizeServer(next.server)}/settings and click "Create Agent" to finish manually.`,
+                        );
+                    }
+                } else {
+                    prompts.log.warn(
+                        `Heads up — @${next.alias} must exist in Settings → Create Agent before jobs can be delivered.`,
+                    );
+                }
+            }
+        }
+    }
+
+    // ---------- 7. Save ----------
+    next.updatedAt = new Date().toISOString();
+    writeConfig(next);
+
+    const redacted = { ...next };
+    if (redacted.token) redacted.token = `${redacted.token.slice(0, 4)}…(redacted)`;
+    prompts.note(JSON.stringify(redacted, null, 2), "Saved ~/.kronos/config.json");
+
+    // ---------- 8. Final probe + handoff ----------
+    if (next.server) await probeServer(prompts, next.server);
+
+    const startNow = await prompts.confirm({
+        message: next.alias
+            ? `Start the agent as @${next.alias} now?  (Ctrl+C ends it)`
+            : "Start the worker now?",
+        initialValue: false,
+    });
+    if (prompts.isCancel(startNow)) {
+        prompts.outro(next.alias ? `Saved. Next: kronos up --alias ${next.alias}` : "Saved. Run `kronos up` whenever you're ready.");
+        return;
+    }
+    if (startNow) {
+        prompts.outro("Launching server & worker — press Ctrl+C to stop.");
+        const argsList = ["--drive-acp", "--continuous", "--queue-transport", "streamable-http"];
+        if (next.alias) argsList.push("--alias", next.alias);
+        if (next.token) argsList.push("--token", next.token);
+        if (next.server) argsList.push("--server", next.server);
+        await commandWatchStdio(argsList);
+        return;
+    }
+    prompts.outro(
+        next.alias
+            ? `Saved. Next: kronos up --alias ${next.alias}`
+            : "Saved. Next: kronos up --alias <your-alias>",
+    );
+}
+
 async function commandLogin(rawArgs) {
     const args = parseArgs(rawArgs);
     let token = typeof args.token === "string"
@@ -651,13 +1474,9 @@ async function commandWatchStdio(rawArgs) {
     const positionalToken = typeof args._[1] === "string" ? args._[1] : undefined;
     const positionalServer = typeof args._[2] === "string" ? args._[2] : undefined;
 
-    const alias = `${args.alias || positionalAlias || ""}`.trim();
+    const alias = `${args.alias || positionalAlias || config.alias || ""}`.trim();
     const token = `${args.token || positionalToken || config.token || ""}`.trim();
-    const server = normalizeServer(
-        typeof args.server === "string"
-            ? args.server
-            : (positionalServer || config.server),
-    );
+    const server = resolveServer(args, positionalServer, config.server || DEFAULTS.server);
     const verbose = Boolean(args.verbose);
     const driveAcp = Boolean(args["drive-acp"]);
     const continuousDriveAcp = Boolean(args.continuous || args.loop || args["watch-queue"]);
@@ -666,16 +1485,8 @@ async function commandWatchStdio(rawArgs) {
         : (typeof args["agent-cmd"] === "string"
             ? args["agent-cmd"]
             : (`${process.env.KRONOS_ACP_AGENT_CMD || config.agent || "opencode acp"}`.trim()));
-    const rawPollMs = Number(args["poll-ms"] ?? args.interval ?? 3000);
-    const pollMs = Number.isFinite(rawPollMs) ? Math.max(500, Math.floor(rawPollMs)) : 3000;
-    const queueTransportRaw = `${args["queue-transport"] || args.transport || ""}`.trim().toLowerCase();
-    const queueTransport = ["polling", "streamable-http"].includes(queueTransportRaw)
-        ? queueTransportRaw
-        : "polling";
     const dbPath = typeof args["db-path"] === "string" ? args["db-path"] : undefined;
     const taskBodyOverride = typeof args["task-body-override"] === "string" ? args["task-body-override"] : undefined;
-    const mentionPreprocessEnabled = !Boolean(args["no-mention-preprocess"]);
-    const customCwd = typeof args.cwd === "string" ? args.cwd : (typeof args["work-dir"] === "string" ? args["work-dir"] : undefined);
 
 
     if (!alias) {
@@ -689,6 +1500,39 @@ async function commandWatchStdio(rawArgs) {
         return;
     }
 
+    const skipServer = rawArgs.includes("--no-server") || args["no-server"];
+    if (!skipServer && !(await isServerReachable(server))) {
+        const ensure = await ensureServerRunning({
+            server,
+            mode: resolveServerMode(args, rawArgs),
+            log: (m) => { if (verbose) console.error(m); },
+        });
+        if (ensure.error) {
+            console.error(`[kronos] ${ensure.message || `dev server unreachable: ${ensure.error}`}`);
+            if (ensure.error !== "no-checkout") {
+                console.error("[kronos] agent cannot start without a reachable Kronos server.");
+                console.error("  Start the server yourself (`bun run dev` / `npm run dev`) or pass --no-server to try anyway.");
+            }
+            process.exitCode = 1;
+            return;
+        }
+        if (!ensure.alreadyRunning) {
+            console.error(`[kronos] dev server booted at ${ensure.server} via ${ensure.runner}.`);
+        } else {
+            console.error(`[kronos] using existing server at ${ensure.server}.`);
+        }
+    }
+
+    const rawPollMs = Number(args["poll-ms"] ?? args.interval ?? 3000);
+    const pollMs = Number.isFinite(rawPollMs) ? Math.max(500, Math.floor(rawPollMs)) : 3000;
+    const queueTransportRaw = `${args["queue-transport"] || args.transport || ""}`.trim().toLowerCase();
+    const queueTransport = ["polling", "streamable-http"].includes(queueTransportRaw)
+        ? queueTransportRaw
+        : "polling";
+
+    const mentionPreprocessEnabled = !Boolean(rawArgs.includes("--no-mention-preprocess") || args["no-mention-preprocess"]);
+    const customCwd = (typeof args.cwd === "string" ? args.cwd : undefined)
+        || (typeof args["work-dir"] === "string" ? args["work-dir"] : undefined);
     const cloudEndpoint = `${server}/api/acp/events`;
     const pending = [];
     const seenSessions = new Set();
@@ -869,6 +1713,11 @@ async function commandWatchStdio(rawArgs) {
                     });
 
                     if (!response.ok) {
+                        if (response.status === 401 || response.status === 403) {
+                            console.error(`[drive-acp] Queue stream authentication/authorization failed (HTTP ${response.status}). Exiting.`);
+                            await stopAndExit(1);
+                            return;
+                        }
                         if (response.status === 404 || response.status === 405 || response.status === 501) {
                             streamUnsupported = true;
                             break;
@@ -1019,7 +1868,7 @@ async function commandProxy(rawArgs) {
 
     const alias = `${args.alias || ""}`.trim();
     const token = `${args.token || config.token || ""}`.trim();
-    const server = normalizeServer(args.server || config.server);
+    const server = resolveServer(args, undefined, config.server || DEFAULTS.server);
     const agentCmd = `${args.agent || config.agent || "opencode acp"}`.trim();
     const verbose = Boolean(args.verbose);
 
@@ -1032,6 +1881,23 @@ async function commandProxy(rawArgs) {
         console.error("Missing token. Use --token <token> or run `kronos login` first.");
         process.exitCode = 1;
         return;
+    }
+
+    const skipServer = rawArgs.includes("--no-server") || args["no-server"];
+    if (!skipServer && !(await isServerReachable(server))) {
+        const ensure = await ensureServerRunning({
+            server,
+            mode: resolveServerMode(args, rawArgs),
+            log: (m) => { if (verbose) console.error(m); },
+        });
+        if (ensure.error) {
+            console.error(`[kronos] ${ensure.message || `dev server unreachable: ${ensure.error}`}`);
+            process.exitCode = 1;
+            return;
+        }
+        if (verbose) {
+            console.error(`[kronos] using dev server at ${ensure.server} (via ${ensure.runner}).`);
+        }
     }
 
     // Split the agent command into binary and arguments
@@ -1173,10 +2039,165 @@ async function commandProxy(rawArgs) {
     });
 }
 
+// ------------------------------------------------------------------------
+// All-in-one supervisor commands (server + worker)
+// ------------------------------------------------------------------------
+async function commandServe(rawArgs) {
+    const args = parseArgs(rawArgs);
+    const config = readConfig();
+    const server = resolveServer(args, undefined, config.server || DEFAULTS.server);
+
+    if (args.help || args.h) {
+        console.log(`kronos serve
+
+Start the Kronos Next.js dev server and block until killed.
+
+Auto-discovers the kronos checkout by walking up from the current directory,
+honoring KRONOS_INSTALL_DIR, or walking up from the binary's own path.
+
+Uses \`bun run start\` (or \`npm run start\` if bun is unavailable), auto-running
+\`build\` first when \`.next/\` is missing. Pass --dev for \`next dev\` (HMR).
+
+Options:
+  --server <url>  override the server URL (default: ${DEFAULTS.server})
+  --mode prod|dev default prod (use built bundle); --dev for HMR
+  --no-server     skip auto-bootstrap (assume server is already running)
+
+Spawns the start script in the detected checkout, waits for /api/health to
+respond, then blocks. Ctrl+C stops the worker and the server.
+`);
+        return;
+    }
+
+    console.log(`[kronos] serve → ensuring ${server} is reachable...`);
+    const skipServer = rawArgs.includes("--no-server") || args["no-server"];
+    let ensure = { alreadyRunning: true, server };
+    if (!skipServer) {
+        ensure = await ensureServerRunning({
+            server,
+            mode: resolveServerMode(args, rawArgs),
+            log: (m) => console.log(m),
+        });
+        if (ensure.error) {
+            console.error(`[kronos] ${ensure.message || ensure.error}`);
+            process.exitCode = 1;
+            return;
+        }
+    }
+
+    console.log(`[kronos] server up at ${ensure.server}. Ctrl+C to stop.`);
+    await new Promise(() => {});
+}
+
+async function commandUp(rawArgs) {
+    const args = parseArgs(rawArgs);
+    const config = readConfig();
+    const server = resolveServer(args, undefined, config.server || DEFAULTS.server);
+
+    if (args.help || args.h) {
+        console.log(`kronos up
+
+Start the dev server (if not already running) AND the agent worker in one command.
+
+\`\`\`
+$ kronos up --alias my-agent    # production start + worker
+$ kronos up --alias my-agent --dev  # next dev (HMR) + worker
+\`\`\`
+
+Server mode:
+  - default: \`bun run start\` (or \`npm run start\`); auto-runs \`bun run build\`
+    first if \`.next/\` is absent.
+  - --dev:   \`bun run dev\` for HMR.
+
+Options:
+  --server <url>   override the server URL
+  --alias <alias>  alias to consume
+  --mode prod|dev  default prod
+  --no-server      skip auto-bootstrap
+  See \`kronos agent --help\` for full agent options.
+`);
+        return;
+    }
+
+    const skipServer = rawArgs.includes("--no-server") || args["no-server"];
+    if (!skipServer) {
+        const ensure = await ensureServerRunning({
+            server,
+            mode: resolveServerMode(args, rawArgs),
+            log: (m) => console.log(m),
+        });
+        if (ensure.error) {
+            console.error(`[kronos] ${ensure.message || ensure.error}`);
+            process.exitCode = 1;
+            return;
+        }
+        if (ensure.spawned) console.log(`[kronos] dev server spawned via ${ensure.runner} in ${ensure.checkout}.`);
+        else if (ensure.alreadyRunning) console.log(`[kronos] using existing server at ${ensure.server}.`);
+    }
+
+    await commandWatchStdio([
+        "--drive-acp",
+        "--continuous",
+        "--queue-transport",
+        "streamable-http",
+        ...rawArgs,
+    ]);
+}
+
+async function commandDown(rawArgs) {
+    const args = parseArgs(rawArgs);
+    if (args.help || args.h) {
+        console.log(`kronos down
+
+Stop a dev server spawned by this CLI process. If the dev server was spawned in
+a different terminal, you'll need to stop it manually (taskkill / kill).
+
+On Windows, kills the entire process tree spawned by \`npm run dev\`.
+`);
+        return;
+    }
+    if (!spawnedDevServer) {
+        console.log("[kronos] no spawned dev server in this process. If you started it elsewhere:");
+        console.log("  Windows : taskkill /im node.exe | findstr /i kronos  (or use Task Manager)");
+        console.log("  Unix    : ps -ef | grep 'npm run dev'");
+        return;
+    }
+    console.log(`[kronos] stopping dev server (pid ${spawnedDevServer.pid})...`);
+    killSpawnedDevServer();
+    await sleep(1500);
+    if (spawnedDevServer.exitCode === null) {
+        console.log("[kronos] giving it 5 more seconds, then SIGKILL fallback.");
+        try { spawnedDevServer.kill("SIGKILL"); } catch { /* ignore */ }
+    } else {
+        console.log(`[kronos] dev server exited with code ${spawnedDevServer.exitCode}.`);
+    }
+}
+
+
 async function main() {
     const [, , command, ...rawArgs] = process.argv;
     if (!command || command === "help" || command === "--help" || command === "-h") {
         printHelp();
+        return;
+    }
+
+    if (command === "setup") {
+        await commandSetup(rawArgs);
+        return;
+    }
+
+    if (command === "up") {
+        await commandUp(rawArgs);
+        return;
+    }
+
+    if (command === "serve") {
+        await commandServe(rawArgs);
+        return;
+    }
+
+    if (command === "down") {
+        await commandDown(rawArgs);
         return;
     }
 
@@ -1195,6 +2216,17 @@ async function main() {
         return;
     }
 
+    if (command === "agent") {
+        await commandWatchStdio([
+            "--drive-acp",
+            "--continuous",
+            "--queue-transport",
+            "streamable-http",
+            ...rawArgs,
+        ]);
+        return;
+    }
+
     if (command === "proxy") {
         await commandProxy(rawArgs);
         return;
@@ -1205,7 +2237,10 @@ async function main() {
     process.exitCode = 1;
 }
 
-void main();
+main().catch((err) => {
+    console.error("[kronos] Fatal error:", err.message || err);
+    process.exit(1);
+});
 
 module.exports = {
     parseArgs,
@@ -1220,9 +2255,29 @@ module.exports = {
     fetchPendingTaskForAlias,
     runDrivenAcpSession,
     promptToken,
+    commandSetup,
+    commandUp,
+    commandServe,
+    commandDown,
     commandLogin,
     commandWatchStdio,
     commandProxy,
     main,
+    // helpers (also used internally)
+    openUrl,
+    sanitiseAlias,
+    probeServer,
+    fetchAgentAliases,
+    ensureAgentAlias,
+    pickAlias,
+    promptWithDefault,
+    loadClackPrompts,
+    findKronosCheckout,
+    isServerReachable,
+    ensureServerRunning,
+    killSpawnedDevServer,
+    detectPackageRunner,
+    resolveServerMode,
+    runRunnerAwait,
 };
 
