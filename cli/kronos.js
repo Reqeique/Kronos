@@ -1626,13 +1626,13 @@ async function commandWatchStdio(rawArgs) {
         }, delayMs);
     }
 
+    const MAX_FLUSH_RETRIES = 10;
+
     async function flushQueue() {
         if (flushInFlight) return;
         flushInFlight = true;
         try {
             while (pending.length > 0) {
-                // If stopped and not graceful, optionally break
-                // But generally better to flush everything before exit!
                 const next = pending[0];
                 try {
                     await postCloudEvent(next);
@@ -1652,14 +1652,25 @@ async function commandWatchStdio(rawArgs) {
                     }
 
                     flushFailureCount += 1;
+                    if (flushFailureCount > MAX_FLUSH_RETRIES) {
+                        console.error(`[cloud] max retries (${MAX_FLUSH_RETRIES}) exceeded, dropping event:`, next.eventType, next.sessionId || "-");
+                        pending.shift();
+                        flushFailureCount = 0;
+                        continue;
+                    }
+
                     const waitMs = backoffMs(flushFailureCount);
-                    log("[cloud] send failed, retrying in ms", waitMs, String(error));
+                    log("[cloud] send failed (attempt", flushFailureCount, "), retrying in", waitMs, "ms:", String(error));
                     scheduleFlush(waitMs);
                     return;
                 }
             }
         } finally {
             flushInFlight = false;
+            // If more events arrived while we were in-flight, re-schedule immediately.
+            if (pending.length > 0 && !shouldStop && !flushTimer) {
+                scheduleFlush(0);
+            }
         }
     }
 
