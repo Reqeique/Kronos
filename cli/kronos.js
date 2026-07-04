@@ -491,10 +491,12 @@ async function runDrivenAcpSession({
         shell: true,
         cwd: rootDir,
     });
+    activeAgentChild = child;
 
     let childExited = false;
     child.on("exit", () => {
         childExited = true;
+        if (activeAgentChild === child) activeAgentChild = null;
     });
     child.stderr.on("data", (chunk) => {
         const text = `${chunk}`.trim();
@@ -725,6 +727,29 @@ let spawnedDir = null;
 let spawnedRunner = null;
 let spawnedPort = null;
 
+let activeAgentChild = null;
+
+function killActiveAgentChild() {
+    if (activeAgentChild && !activeAgentChild.killed && activeAgentChild.exitCode === null) {
+        try {
+            if (process.platform === "win32") {
+                spawn("taskkill", ["/pid", String(activeAgentChild.pid), "/f", "/t"], {
+                    detached: true,
+                    stdio: "ignore",
+                }).unref();
+            } else {
+                activeAgentChild.kill("SIGTERM");
+                const target = activeAgentChild;
+                setTimeout(() => {
+                    try { target.kill("SIGKILL"); } catch {}
+                }, 2000).unref();
+            }
+        } catch {
+            // ignore
+        }
+    }
+}
+
 let cachedPackageRunner = null;
 function detectPackageRunner() {
     if (cachedPackageRunner !== null) return cachedPackageRunner;
@@ -912,14 +937,19 @@ function killSpawnedDevServer() {
     }
 }
 
-process.on("exit", killSpawnedDevServer);
+process.on("exit", () => {
+    killActiveAgentChild();
+    killSpawnedDevServer();
+});
 process.on("SIGINT", () => {
+    killActiveAgentChild();
     killSpawnedDevServer();
     if (process.listenerCount("SIGINT") <= 1) {
         process.exit(130);
     }
 });
 process.on("SIGTERM", () => {
+    killActiveAgentChild();
     killSpawnedDevServer();
     if (process.listenerCount("SIGTERM") <= 1) {
         process.exit(143);
@@ -1979,11 +2009,11 @@ async function commandProxy(rawArgs) {
         flushQueue();
     };
 
-    // We start the child process natively
     log(`Spawning agent: ${binary} ${binaryArgs.join(" ")}`);
     const child = spawn(binary, binaryArgs, {
         stdio: ['pipe', 'pipe', 'pipe']
     });
+    activeAgentChild = child;
 
     // 1. Transparent Pipe: Parent Stdin -> Child Stdin
     process.stdin.pipe(child.stdin);
@@ -2028,6 +2058,7 @@ async function commandProxy(rawArgs) {
     child.on('exit', async (code) => {
         log(`Agent subprocess exited with code ${code}`);
         shouldStop = true;
+        if (activeAgentChild === child) activeAgentChild = null;
 
         // One final flush attempt
         while (flushInFlight || pending.length > 0) {
