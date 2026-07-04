@@ -17,6 +17,8 @@ export async function GET() {
 
     const stream = new ReadableStream({
         start(controller) {
+            let closed = false;
+
             // Send initial connected event
             controller.enqueue(
                 encoder.encode(`event: connected\ndata: ${JSON.stringify({ userId })}\n\n`),
@@ -24,24 +26,37 @@ export async function GET() {
 
             // Subscribe to task run updates
             const unsubscribe = eventBus.onTaskRunUpdated((payload) => {
+                if (closed) {
+                    unsubscribe();
+                    return;
+                }
                 try {
                     const data = `event: taskRunUpdated\ndata: ${JSON.stringify(payload)}\n\n`;
                     controller.enqueue(encoder.encode(data));
                 } catch {
-                    // Client disconnected
+                    closed = true;
+                    unsubscribe();
+                    clearInterval(pingInterval);
                 }
             });
 
             // Keep-alive ping every 30s to prevent proxy timeouts
             const pingInterval = setInterval(() => {
+                if (closed) {
+                    clearInterval(pingInterval);
+                    return;
+                }
                 try {
                     controller.enqueue(encoder.encode(`: ping\n\n`));
                 } catch {
+                    closed = true;
                     clearInterval(pingInterval);
+                    unsubscribe();
                 }
             }, 30_000);
 
             cleanup = () => {
+                closed = true;
                 unsubscribe();
                 clearInterval(pingInterval);
                 logger.info("SSE client disconnected", { userId });

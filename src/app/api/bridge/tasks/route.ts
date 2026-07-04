@@ -63,10 +63,17 @@ export async function GET(req: NextRequest) {
 
     const stream = new ReadableStream({
         async start(controller) {
+            let closed = false;
+
             const send = (event: string, payload: Record<string, unknown>) => {
-                controller.enqueue(
-                    encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`),
-                );
+                if (closed) return;
+                try {
+                    controller.enqueue(
+                        encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`),
+                    );
+                } catch {
+                    closed = true;
+                }
             };
 
             const sendTask = (task: StreamTask | null) => {
@@ -90,30 +97,39 @@ export async function GET(req: NextRequest) {
             sendTask(initialTask);
 
             const unsubscribe = eventBus.onTaskRunUpdated(async (payload) => {
+                if (closed) { unsubscribe(); return; }
                 if (payload.status !== "DISPATCHED") return;
-                const task = await findRunnableTaskForAlias(bridge.userId, alias, payload.id);
-                sendTask(task);
+                try {
+                    const task = await findRunnableTaskForAlias(bridge.userId, alias, payload.id);
+                    sendTask(task);
+                } catch {
+                    // Ignore transient errors in event handler
+                }
             });
 
             // Poll for due SCHEDULED tasks because task creation events do not emit on eventBus.
             const duePollInterval = setInterval(async () => {
+                if (closed) { clearInterval(duePollInterval); return; }
                 try {
                     const task = await findRunnableTaskForAlias(bridge.userId, alias);
                     sendTask(task);
                 } catch {
                     // Ignore transient DB/read errors for stream continuity.
                 }
-            }, 2_000);
+            }, 5_000);
 
             const keepAlive = setInterval(() => {
+                if (closed) { clearInterval(keepAlive); return; }
                 try {
                     controller.enqueue(encoder.encode(": ping\n\n"));
                 } catch {
+                    closed = true;
                     clearInterval(keepAlive);
                 }
             }, 30_000);
 
             cleanup = () => {
+                closed = true;
                 unsubscribe();
                 clearInterval(duePollInterval);
                 clearInterval(keepAlive);

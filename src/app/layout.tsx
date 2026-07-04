@@ -10,18 +10,11 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { Host_Grotesk } from "next/font/google";
-
-const hostGrotesk = Host_Grotesk({
-    subsets: ["latin"],
-    variable: "--font-sans",
-    preload: false,
-});
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en" suppressHydrationWarning>
-            <body className={`${hostGrotesk.variable} font-sans antialiased bg-background text-foreground`}>
+            <body className="font-sans antialiased bg-background text-foreground">
                 <ThemeProvider
                     attribute="class"
                     defaultTheme="dark"
