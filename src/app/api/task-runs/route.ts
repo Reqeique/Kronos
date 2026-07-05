@@ -89,6 +89,17 @@ export async function POST(req: NextRequest) {
             },
         });
 
+        // Tell SSE consumers (`/api/events` dashboard + `/api/bridge/tasks`
+        // CLI queue) that a new runnable task exists so they don't have to
+        // poll the DB to discover it. The status is still SCHEDULED — the
+        // periodic scheduler tick flips it to DISPATCHED on/after scheduledAt
+        // and emits its own event. This initial emit just informs the UI.
+        eventBus.emitTaskRunUpdated({
+            id: taskRun.id,
+            status: taskRun.status,
+            agentId: taskRun.agentId,
+        });
+
         // If overdue, try immediate dispatch for non-OBSERVED modes
         if (normalizedMode !== "OBSERVED" && new Date(scheduledAt) <= new Date()) {
             try {

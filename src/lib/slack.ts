@@ -2,13 +2,21 @@ import { WebClient } from "@slack/web-api";
 import prisma from "./prisma";
 import logger from "./logger";
 
+// Hard cap on any single Slack API call. Without this, `chat.postMessage`
+// can hang the awaited `dispatchTaskMessage` indefinitely; combined with the
+// SQLite write lock from the scheduler that takes down the whole server.
+const SLACK_REQUEST_TIMEOUT_MS = 10_000;
+
 // ─── Get Slack client for a user ────────────────────────
 export async function getSlackClient(userId: string): Promise<WebClient> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user?.slackAccessToken) {
         throw new Error("Slack not connected for this user");
     }
-    return new WebClient(user.slackAccessToken);
+    return new WebClient(user.slackAccessToken, {
+        timeout: SLACK_REQUEST_TIMEOUT_MS,
+        retryConfig: { retries: 0 },
+    });
 }
 
 // ─── Format the v1.1 dispatch message ───────────────────

@@ -98,25 +98,19 @@ export async function GET(req: NextRequest) {
 
             const unsubscribe = eventBus.onTaskRunUpdated(async (payload) => {
                 if (closed) { unsubscribe(); return; }
-                if (payload.status !== "DISPATCHED") return;
+                // Both SCHEDULED (newly created) and DISPATCHED (scheduler
+                // flipped it) events are interesting here. The findRunnableTask
+                // helper already enforces the "is it actually runnable for this
+                // alias right now?" filter, so it's safe to forward any of
+                // these.
                 try {
                     const task = await findRunnableTaskForAlias(bridge.userId, alias, payload.id);
+                    if (!task) return;
                     sendTask(task);
                 } catch {
                     // Ignore transient errors in event handler
                 }
             });
-
-            // Poll for due SCHEDULED tasks because task creation events do not emit on eventBus.
-            const duePollInterval = setInterval(async () => {
-                if (closed) { clearInterval(duePollInterval); return; }
-                try {
-                    const task = await findRunnableTaskForAlias(bridge.userId, alias);
-                    sendTask(task);
-                } catch {
-                    // Ignore transient DB/read errors for stream continuity.
-                }
-            }, 5_000);
 
             const keepAlive = setInterval(() => {
                 if (closed) { clearInterval(keepAlive); return; }
@@ -131,7 +125,6 @@ export async function GET(req: NextRequest) {
             cleanup = () => {
                 closed = true;
                 unsubscribe();
-                clearInterval(duePollInterval);
                 clearInterval(keepAlive);
             };
         },
