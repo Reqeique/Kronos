@@ -1,6 +1,10 @@
 import { ensurePrismaReady } from "@/lib/prisma";
 import { startScheduler } from "@/lib/scheduler";
 
+// Install EPIPE protection before any other dependency writes to the
+// console. The module is side-effecting; importing it once is sufficient.
+import "@/lib/epipeGuard";
+
 export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
     if (process.env.NEXT_RUNTIME_KRONOS_SCHEDULER === "0") return;

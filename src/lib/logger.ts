@@ -10,6 +10,8 @@ interface LogEntry {
     data?: Record<string, unknown>;
 }
 
+type Stream = "stdout" | "stderr";
+
 class Logger {
     private level: LogLevel;
 
@@ -39,20 +41,25 @@ class Logger {
             data,
         };
 
-        const output = JSON.stringify(entry);
+        let output: string;
+        try {
+            output = JSON.stringify(entry);
+        } catch {
+            output = JSON.stringify({
+                timestamp: new Date().toISOString(),
+                level,
+                message: String(message).slice(0, 1000),
+            });
+        }
 
-        switch (level) {
-            case "error":
-                console.error(output);
-                break;
-            case "warn":
-                console.warn(output);
-                break;
-            case "debug":
-                console.debug(output);
-                break;
-            default:
-                console.log(output);
+        const stream: Stream = level === "error" ? "stderr" : "stdout";
+        const target: NodeJS.WriteStream = stream === "stdout" ? process.stdout : process.stderr;
+        try {
+            target.write(output + "\n");
+        } catch {
+            // epipeGuard (installed via src/instrumentation.ts -> src/lib/epipeGuard.ts)
+            // captures orphaned-stdout writes to KRONOS_LOG_DIR. If the guard is
+            // not installed (e.g. library import in tests), writes are silently no-op.
         }
     }
 
@@ -78,5 +85,12 @@ class Logger {
     }
 }
 
-export const logger = new Logger();
+let loggerInstance: Logger | null = null;
+
+export function getLogger(): Logger {
+    if (!loggerInstance) loggerInstance = new Logger();
+    return loggerInstance;
+}
+
+export const logger = getLogger();
 export default logger;
