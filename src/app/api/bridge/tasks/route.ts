@@ -112,6 +112,19 @@ export async function GET(req: NextRequest) {
                 }
             });
 
+            // Polling fallback: in production mode, the scheduler may run in
+            // a different worker than this SSE handler, so eventBus events
+            // never arrive. Poll every 5s to catch dispatched tasks.
+            const duePollInterval = setInterval(async () => {
+                if (closed) { clearInterval(duePollInterval); return; }
+                try {
+                    const task = await findRunnableTaskForAlias(bridge.userId, alias);
+                    sendTask(task);
+                } catch {
+                    // Ignore transient errors in poll
+                }
+            }, 5_000);
+
             const keepAlive = setInterval(() => {
                 if (closed) { clearInterval(keepAlive); return; }
                 try {
@@ -125,6 +138,7 @@ export async function GET(req: NextRequest) {
             cleanup = () => {
                 closed = true;
                 unsubscribe();
+                clearInterval(duePollInterval);
                 clearInterval(keepAlive);
             };
         },

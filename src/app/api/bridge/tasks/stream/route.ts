@@ -88,6 +88,16 @@ export async function GET(req: NextRequest) {
                 sendTask(task);
             });
 
+            // Polling fallback for production worker isolation (see tasks/route.ts)
+            const duePollInterval = setInterval(async () => {
+                try {
+                    const task = await findDispatchedTaskForAlias(bridge.userId, alias);
+                    sendTask(task);
+                } catch {
+                    // Ignore transient errors in poll
+                }
+            }, 5_000);
+
             const keepAlive = setInterval(() => {
                 try {
                     controller.enqueue(encoder.encode(": ping\n\n"));
@@ -98,6 +108,7 @@ export async function GET(req: NextRequest) {
 
             cleanup = () => {
                 unsubscribe();
+                clearInterval(duePollInterval);
                 clearInterval(keepAlive);
             };
         },
