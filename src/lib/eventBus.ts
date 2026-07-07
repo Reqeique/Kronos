@@ -2,7 +2,14 @@ import { EventEmitter } from "events";
 
 // ─── Typed Event Bus ─────────────────────────────────────
 // Single-process pub/sub for real-time SSE events.
-// In production with multiple workers, swap for Redis pub/sub.
+//
+// Anchored to `globalThis` via `Symbol.for(...)` so that Next.js's per-bundle
+// module registries (instrumentation hook, route handlers, scheduler, etc.)
+// share ONE EventEmitter instance. Without this, SSE emitters and subscribers
+// land in different module realms and events silently drop in production.
+//
+// Scope: single OS process, single V8 isolate. For distributed deployments
+// (PM2 cluster workers, containers, serverless), swap for Redis pub/sub.
 
 export interface TaskRunEvent {
     type: "taskRunUpdated";
@@ -22,19 +29,24 @@ export interface TaskRunEvent {
     };
 }
 
-class KronosEventBus extends EventEmitter {
-    private static instance: KronosEventBus;
+const GLOBAL_BUS_KEY = Symbol.for("kronos.eventBus.v1");
 
+type GlobalScope = typeof globalThis & {
+    [GLOBAL_BUS_KEY]?: KronosEventBus;
+};
+
+class KronosEventBus extends EventEmitter {
     private constructor() {
         super();
         this.setMaxListeners(500); // Support up to 500 concurrent SSE clients
     }
 
     static getInstance(): KronosEventBus {
-        if (!KronosEventBus.instance) {
-            KronosEventBus.instance = new KronosEventBus();
+        const g = globalThis as GlobalScope;
+        if (!g[GLOBAL_BUS_KEY]) {
+            g[GLOBAL_BUS_KEY] = new KronosEventBus();
         }
-        return KronosEventBus.instance;
+        return g[GLOBAL_BUS_KEY]!;
     }
 
     emitTaskRunUpdated(payload: TaskRunEvent["payload"]) {
