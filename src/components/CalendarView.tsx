@@ -1,6 +1,8 @@
 "use client";
 
+import type React from "react";
 import { useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { createCalendarControlsPlugin } from "@schedule-x/calendar-controls";
 import { createDragAndDropPlugin } from "@schedule-x/drag-and-drop";
 import { createEventModalPlugin } from "@schedule-x/event-modal";
@@ -8,6 +10,14 @@ import { ScheduleXCalendar, useNextCalendarApp } from "@schedule-x/react";
 import { viewDay, viewMonthGrid, viewWeek, type CalendarApp } from "@schedule-x/calendar";
 import { useTheme } from "next-themes";
 import "temporal-polyfill/global";
+
+import {
+    isDotEvent,
+    applyStrategy,
+    type CalendarStrategy,
+} from "@/lib/calendarStrategies";
+
+const DotEvent = dynamic(() => import("@/components/DotEvent"), { ssr: false });
 
 export type CalView = "timeGridDay" | "timeGridWeek" | "dayGridMonth";
 
@@ -26,6 +36,8 @@ interface CalendarViewProps {
     view: CalView;
     onEventClick: (taskRunId: string) => void;
     onDateSelect: (start: Date, end: Date) => void;
+    strategy?: CalendarStrategy;
+    nowMs?: number;
 }
 
 type ScheduleEventInput = {
@@ -37,6 +49,7 @@ type ScheduleEventInput = {
     status: string;
     alias: string;
     mode: string;
+    _isDot?: boolean;
 };
 
 type CalendarEventsInput = Parameters<CalendarApp["events"]["set"]>[0];
@@ -53,11 +66,27 @@ function toZonedDateTime(dateTime: string, timezone: string): Temporal.ZonedDate
     }
 }
 
+function strategyClass(strategy: CalendarStrategy | undefined): string {
+    switch (strategy) {
+        case "floor":
+            return "calendar-view--floor";
+        case "extend":
+            return "calendar-view--extend";
+        case "dot":
+            return "calendar-view--dot";
+        case "current":
+        default:
+            return "calendar-view--current";
+    }
+}
+
 export default function CalendarView({
     events,
     view,
     onEventClick,
     onDateSelect,
+    strategy = "current",
+    nowMs,
 }: CalendarViewProps) {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
@@ -66,27 +95,32 @@ export default function CalendarView({
         [],
     );
 
+    const now = typeof nowMs === "number" ? nowMs : Date.now();
+
     const scheduleEvents = useMemo<ScheduleEventInput[]>(
         () => {
             const mapped: ScheduleEventInput[] = [];
-            for (const event of events) {
-                const start = toZonedDateTime(event.start, timezone);
-                const end = toZonedDateTime(event.end, timezone);
+            for (const raw of events) {
+                const transformed = applyStrategy(strategy, raw, now);
+                const start = toZonedDateTime(transformed.start, timezone);
+                const end = toZonedDateTime(transformed.end, timezone);
                 if (!start || !end) continue;
+                const _isDot = strategy === "dot" && isDotEvent(transformed, now);
                 mapped.push({
-                    id: event.id,
-                    title: event.title,
+                    id: transformed.id,
+                    title: transformed.title,
                     start,
                     end,
-                    calendarId: event.status.toUpperCase(),
-                    status: event.status,
-                    alias: event.alias,
-                    mode: event.mode,
+                    calendarId: transformed.status.toUpperCase(),
+                    status: transformed.status,
+                    alias: transformed.alias,
+                    mode: transformed.mode,
+                    _isDot,
                 });
             }
             return mapped;
         },
-        [events, timezone],
+        [events, timezone, strategy, now],
     );
 
     const calendarControls = useMemo(() => createCalendarControlsPlugin(), []);
@@ -107,6 +141,11 @@ export default function CalendarView({
             timezone,
             theme: "shadcn",
             events: [],
+            weekOptions: {
+                eventOverlap: true,
+                eventWidth: 92,
+                gridStep: 15,
+            },
             callbacks: {
                 onEventClick: (event) => {
                     onEventClick(String(event.id));
@@ -163,9 +202,20 @@ export default function CalendarView({
         calendar.events.set(scheduleEvents as unknown as CalendarEventsInput);
     }, [calendar, scheduleEvents]);
 
+    const useDots = strategy === "dot";
+
     return (
-        <div className="calendar-view is-shadcn">
-            {calendar ? <ScheduleXCalendar calendarApp={calendar} /> : null}
-        </div>
+        <div className={`calendar-view is-shadcn ${strategyClass(strategy)}`}>
+            {calendar ? (
+                <ScheduleXCalendar
+                    calendarApp={calendar}
+                    customComponents={
+                        useDots
+                            ? { timeGridEvent: DotEvent as unknown as React.ComponentType<unknown> }
+                            : undefined
+                    }
+                />
+            ) : null}
+       </div>
     );
 }
