@@ -5,17 +5,36 @@ import eventBus from "./eventBus";
 import { SchedulerHeap } from "./schedulerHeap";
 import { buildLifecycleUpdate, getEffectiveActiveDurationMs } from "./taskRunLifecycle";
 
-// EPIPE-safe logging wrapper. In Next.js dev with orphaned stdout (detached
-// terminal, killed parent process), process.stdout.write can throw EPIPE
-// synchronously. If a logger call inside the scheduler throws, it must NOT
-// abort scheduler logic (boot, arm, dispatch). This wrapper swallows logger
-// exceptions so the scheduler keeps running even when logging is broken.
+// EPIPE-safe logging wrapper. On Windows with an orphaned stdout pipe (detached
+// terminal, killed parent), process.stdout.write throws EPIPE. On some Node
+// versions this is synchronous (caught by try/catch below); on others it's
+// emitted asynchronously as uncaughtException (caught by the dedicated
+// handler installed at module load). Either way, logging must NEVER abort
+// scheduler logic (boot, arm, dispatch).
 type LogFn = (msg: string, data?: Record<string, unknown>) => void;
 const safeLog: Record<"info" | "warn" | "error", LogFn> = {
     info: (msg, data) => { try { logger.info(msg, data); } catch { /* EPIPE — swallow */ } },
     warn: (msg, data) => { try { logger.warn(msg, data); } catch { /* EPIPE — swallow */ } },
     error: (msg, data) => { try { logger.error(msg, data); } catch { /* EPIPE — swallow */ } },
 };
+
+// Install a scheduler-local uncaughtException guard so async EPIPE from logger
+// writes (which escape try/catch) cannot tear down the process during boot
+// or dispatch. The epipeGuard in instrumentation.ts does the same, but Next.js
+// bundle-realm isolation can prevent it from intercepting this chunk's writes.
+let epitGuardInstalled = false;
+function installSchedEpipeGuard(): void {
+    if (epitGuardInstalled) return;
+    epitGuardInstalled = true;
+    process.on("uncaughtException", (err: unknown) => {
+        if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "EPIPE") {
+            safeLog.warn("EPIPE swallowed by scheduler guard", {});
+            return;
+        }
+        throw err;
+    });
+}
+installSchedEpipeGuard();
 
 // ─── Adaptive scheduler ──────────────────────────────────
 // Replaces the fixed 30s `setInterval` that scanned every SCHEDULED (and
