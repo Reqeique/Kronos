@@ -1,9 +1,30 @@
+import { appendFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import prisma from "./prisma";
 import { dispatchTaskMessage } from "./slack";
 import logger from "./logger";
 import eventBus from "./eventBus";
 import { SchedulerHeap } from "./schedulerHeap";
 import { buildLifecycleUpdate, getEffectiveActiveDurationMs } from "./taskRunLifecycle";
+
+// Direct file diagnostics — bypasses stdout/stderr/logger entirely so we can
+// always see what the scheduler is doing, even when the parent pipe is dead.
+// The same KRONOS_LOG_DIR fallback file that epipeGuard uses.
+const BOOT_LOG_PATH =
+    process.env.KRONOS_SCHEDULER_BOOT_LOG ||
+    (process.env.KRONOS_LOG_DIR
+        ? `${process.env.KRONOS_LOG_DIR.replace(/[\\/]+$/, "")}/scheduler-boot.log`
+        : null);
+function bootDiag(line: string): void {
+    if (!BOOT_LOG_PATH) return;
+    if (process.env.NODE_ENV === "test" && process.env.KRONOS_TEST_ALLOW_FALLBACK !== "1") return;
+    try {
+        mkdirSync(dirname(BOOT_LOG_PATH), { recursive: true });
+        appendFileSync(BOOT_LOG_PATH, `${new Date().toISOString()} ${line}\n`);
+    } catch {
+        /* swallow */
+    }
+}
 
 // EPIPE-safe logging wrapper. On Windows with an orphaned stdout pipe (detached
 // terminal, killed parent), process.stdout.write throws EPIPE. On some Node
@@ -61,47 +82,66 @@ let firing = false;
 const isRunning = (): boolean => running;
 
 export function startScheduler(_intervalMs = 30_000): void {
-    if (running && dueHeap) return; // already booted
+    bootDiag(`startScheduler() enter; running=${running} dueHeap=${!!dueHeap}`);
+
+    // If we already have a heap, keep using it. Otherwise create it RIGHT NOW
+    // and arm the timer BEFORE doing anything else. Lessons learned:
+    //   - safeLog can silently swallow EPIPE, so we can't trust it for boot.
+    //   - bootDiag goes to a file, so we always know if we got here.
+    if (running && dueHeap) {
+        bootDiag("startScheduler() already booted, no-op");
+        return;
+    }
+
     running = true;
+    dueHeap = new SchedulerHeap();
+    armDue();
+    armTimeoutWatchdog();
+
+    bootDiag("startScheduler() armed sync timer; heap initialized");
     safeLog.info("Scheduler started (adaptive heap)");
     void boot();
 }
 
 async function boot(): Promise<void> {
-    dueHeap = new SchedulerHeap();
+    bootDiag("boot() enter");
+    if (!dueHeap) {
+        bootDiag("boot() aborted - dueHeap is null");
+        return;
+    }
     try {
         const scheduled = await prisma.taskRun.findMany({
             where: { status: "SCHEDULED" },
             select: { id: true, scheduledAt: true },
         });
+        bootDiag(`boot() hydrated ${scheduled.length} tasks from DB`);
         for (const t of scheduled) {
             dueHeap.push({ id: t.id, at: t.scheduledAt.getTime() });
         }
         safeLog.info("Scheduler heap hydrated", { count: dueHeap.size });
     } catch (err) {
-        safeLog.error("Scheduler hydration failed", { error: String(err) });
+        const msg = err instanceof Error ? err.message : String(err);
+        bootDiag(`boot() hydration FAILED: ${msg}`);
+        safeLog.error("Scheduler hydration failed", { error: msg });
     } finally {
-        // CRITICAL: armDue + watchdog must run even if logger threw EPIPE
-        // above. Without this, a broken stdout kills the timer and the
-        // scheduler silently dies (observed in production: 5 SCHEDULED tasks
-        // never dispatched because armDue was unreachable after an EPIPE).
         armDue();
-        armTimeoutWatchdog();
+        bootDiag(`boot() complete; dueHeap.size=${dueHeap.size} peek=${JSON.stringify(dueHeap.peek() ?? null)}`);
     }
 }
 
 /** Notify the scheduler that a new (or rescheduled) task is due at `scheduledAtMs`. */
 export function notifyScheduled(taskId: string, scheduledAtMs: number): void {
-    if (!running) return;
-    // If the heap isn't initialized yet (boot still in flight or crashed
-    // mid-boot), kick off a lazy boot. The task will be picked up by the
-    // hydration scan, and boot's finally will arm the timer.
-    if (!dueHeap) {
-        void boot();
-        return;
+    if (!running) {
+        // Cold path: scheduler never started. Kick a synchronous arm. This
+        // path matters in tests/CLI where instrumentation.register() has not
+        // booted us yet.
+        startScheduler();
+        if (!dueHeap) return; // arm failed; give up rather than recurse
+    } else if (!dueHeap) {
+        startScheduler();
+        if (!dueHeap) return;
     }
     dueHeap.push({ id: taskId, at: scheduledAtMs });
-    // Only re-arm if this entry is closer than the current armed deadline.
     rearmIfEarlier(scheduledAtMs);
 }
 
