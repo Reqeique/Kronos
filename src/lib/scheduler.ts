@@ -5,6 +5,18 @@ import eventBus from "./eventBus";
 import { SchedulerHeap } from "./schedulerHeap";
 import { buildLifecycleUpdate, getEffectiveActiveDurationMs } from "./taskRunLifecycle";
 
+// EPIPE-safe logging wrapper. In Next.js dev with orphaned stdout (detached
+// terminal, killed parent process), process.stdout.write can throw EPIPE
+// synchronously. If a logger call inside the scheduler throws, it must NOT
+// abort scheduler logic (boot, arm, dispatch). This wrapper swallows logger
+// exceptions so the scheduler keeps running even when logging is broken.
+type LogFn = (msg: string, data?: Record<string, unknown>) => void;
+const safeLog: Record<"info" | "warn" | "error", LogFn> = {
+    info: (msg, data) => { try { logger.info(msg, data); } catch { /* EPIPE — swallow */ } },
+    warn: (msg, data) => { try { logger.warn(msg, data); } catch { /* EPIPE — swallow */ } },
+    error: (msg, data) => { try { logger.error(msg, data); } catch { /* EPIPE — swallow */ } },
+};
+
 // ─── Adaptive scheduler ──────────────────────────────────
 // Replaces the fixed 30s `setInterval` that scanned every SCHEDULED (and
 // IN_PROGRESS/WAITING) row on each tick. A min-heap keyed by next-fire-time
@@ -30,9 +42,9 @@ let firing = false;
 const isRunning = (): boolean => running;
 
 export function startScheduler(_intervalMs = 30_000): void {
-    if (running) return;
+    if (running && dueHeap) return; // already booted
     running = true;
-    logger.info("Scheduler started (adaptive heap)");
+    safeLog.info("Scheduler started (adaptive heap)");
     void boot();
 }
 
@@ -46,17 +58,29 @@ async function boot(): Promise<void> {
         for (const t of scheduled) {
             dueHeap.push({ id: t.id, at: t.scheduledAt.getTime() });
         }
-        logger.info("Scheduler heap hydrated", { count: dueHeap.size });
+        safeLog.info("Scheduler heap hydrated", { count: dueHeap.size });
     } catch (err) {
-        logger.error("Scheduler hydration failed", { error: String(err) });
+        safeLog.error("Scheduler hydration failed", { error: String(err) });
+    } finally {
+        // CRITICAL: armDue + watchdog must run even if logger threw EPIPE
+        // above. Without this, a broken stdout kills the timer and the
+        // scheduler silently dies (observed in production: 5 SCHEDULED tasks
+        // never dispatched because armDue was unreachable after an EPIPE).
+        armDue();
+        armTimeoutWatchdog();
     }
-    armDue();
-    armTimeoutWatchdog();
 }
 
 /** Notify the scheduler that a new (or rescheduled) task is due at `scheduledAtMs`. */
 export function notifyScheduled(taskId: string, scheduledAtMs: number): void {
-    if (!running || !dueHeap) return;
+    if (!running) return;
+    // If the heap isn't initialized yet (boot still in flight or crashed
+    // mid-boot), kick off a lazy boot. The task will be picked up by the
+    // hydration scan, and boot's finally will arm the timer.
+    if (!dueHeap) {
+        void boot();
+        return;
+    }
     dueHeap.push({ id: taskId, at: scheduledAtMs });
     // Only re-arm if this entry is closer than the current armed deadline.
     rearmIfEarlier(scheduledAtMs);
@@ -100,7 +124,7 @@ async function fireDue(): Promise<void> {
             await dispatchScheduledTask(entry.id, new Date(entry.at));
         }
     } catch (err) {
-        logger.error("Scheduler fire error", { error: String(err) });
+        safeLog.error("Scheduler fire error", { error: String(err) });
     } finally {
         firing = false;
         armDue();
@@ -139,7 +163,7 @@ async function dispatchScheduledTask(taskId: string, scheduledAt: Date): Promise
                 agentId: observedUpdate.agentId,
                 dispatchedAt: observedUpdate.dispatchedAt?.toISOString() ?? scheduledAt.toISOString(),
             });
-            logger.info("Scheduler marked OBSERVED task as dispatched", {
+            safeLog.info("Scheduler marked OBSERVED task as dispatched", {
                 taskRunId: task.id,
                 agentAlias: task.agent.alias,
             });
@@ -162,9 +186,9 @@ async function dispatchScheduledTask(taskId: string, scheduledAt: Date): Promise
             dispatchedAt: scheduledAt.toISOString(),
         });
 
-        logger.info("Scheduler dispatched task", { taskRunId: task.id, agentAlias: task.agent.alias });
+        safeLog.info("Scheduler dispatched task", { taskRunId: task.id, agentAlias: task.agent.alias });
     } catch (err) {
-        logger.error("Scheduler failed to dispatch task", {
+        safeLog.error("Scheduler failed to dispatch task", {
             taskRunId: task.id,
             error: err instanceof Error ? err.message : String(err),
         });
@@ -225,9 +249,9 @@ async function runTimeoutSweep(): Promise<void> {
                         totalWaitDuration: updated.totalWaitDuration,
                     });
 
-                    logger.warn("Task timed out", { taskRunId: task.id, activeElapsedMinutes });
+                    safeLog.warn("Task timed out", { taskRunId: task.id, activeElapsedMinutes });
                 } catch (err) {
-                    logger.error("Scheduler failed to time out task", {
+                    safeLog.error("Scheduler failed to time out task", {
                         taskRunId: task.id,
                         error: err instanceof Error ? err.message : String(err),
                     });
@@ -247,7 +271,7 @@ async function runTimeoutSweep(): Promise<void> {
             armTimeoutWatchdog();
         }
     } catch (err) {
-        logger.error("Scheduler timeout sweep error", { error: String(err) });
+        safeLog.error("Scheduler timeout sweep error", { error: String(err) });
         armTimeoutWatchdog();
     }
 }
@@ -263,7 +287,7 @@ export function stopScheduler(): void {
         timeoutTimer = null;
     }
     dueHeap = null;
-    logger.info("Scheduler stopped");
+    safeLog.info("Scheduler stopped");
 }
 
 // Kept for any external callers/tests that referenced the old tick entrypoint.
