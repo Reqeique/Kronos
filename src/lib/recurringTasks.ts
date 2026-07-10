@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import logger from "@/lib/logger";
 import { v4 as uuidv4 } from "uuid";
 import { CronExpressionParser } from "cron-parser";
+import { notifyScheduled } from "@/lib/scheduler";
 
 export async function handleRecurringTask(completedTaskRunId: string) {
     try {
@@ -41,6 +42,9 @@ export async function handleRecurringTask(completedTaskRunId: string) {
             newTaskRunId: newTaskRun.id,
             scheduledAt: nextDate,
         });
+
+        // Arm the adaptive scheduler to the next firing time.
+        notifyScheduled(newTaskRun.id, nextDate.getTime());
 
         return newTaskRun;
     } catch (error) {

@@ -8,6 +8,7 @@ import { VALID_TRANSITIONS } from "@/types";
 import type { TaskStatus } from "@/types";
 import logger from "@/lib/logger";
 import { v4 as uuidv4 } from "uuid";
+import { notifyScheduled } from "@/lib/scheduler";
 import {
     buildLifecycleUpdate,
     isSchedulingMode,
@@ -99,6 +100,12 @@ export async function POST(req: NextRequest) {
             status: taskRun.status,
             agentId: taskRun.agentId,
         });
+
+        // Register the new SCHEDULED task with the adaptive scheduler so it
+        // arms a setTimeout to its scheduledAt instead of waiting for the next
+        // periodic sweep. Harmless if the task was immediately dispatched
+        // below: the scheduler re-checks DB status at pop time and skips it.
+        notifyScheduled(taskRun.id, new Date(scheduledAt).getTime());
 
         // If overdue, try immediate dispatch for non-OBSERVED modes
         if (normalizedMode !== "OBSERVED" && new Date(scheduledAt) <= new Date()) {
