@@ -49,7 +49,7 @@ installSchedEpipeGuard();
 // is re-checked at pop time, so the heap never causes a wrong dispatch.
 
 const MAX_TIMER_MS = 2 ** 31 - 1; // setTimeout clamp on most engines
-const REARM_GREACE_MS = 1_000; // wake a touch before the nearest deadline
+const REARM_GREACE_MS = 0; // 0 = fire exactly at deadline. Non-zero causes a spin loop
 const TIMEOUT_FALLBACK_MS = 30_000; // sweep bound when running tasks lack a deadline
 
 let running = false;
@@ -140,7 +140,16 @@ async function fireDue(): Promise<void> {
         const now = Date.now();
         const due = dueHeap.popDue(now);
         for (const entry of due) {
-            await dispatchScheduledTask(entry.id, new Date(entry.at));
+            try {
+                await dispatchScheduledTask(entry.id, new Date(entry.at));
+            } catch (err) {
+                safeLog.error("Error dispatching individual task in fireDue", {
+                    taskId: entry.id,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+                // Re-push so the entry isn't lost from a sibling dispatch failure.
+                dueHeap?.push({ id: entry.id, at: entry.at });
+            }
         }
     } catch (err) {
         safeLog.error("Scheduler fire error", { error: String(err) });
@@ -151,26 +160,22 @@ async function fireDue(): Promise<void> {
 }
 
 async function dispatchScheduledTask(taskId: string, scheduledAt: Date): Promise<void> {
-    // Re-check the DB: the task may have been dispatched early, deleted, or
-    // completed before its due time. This keeps correctness without wiring
-    // removal into every state transition.
-    const task = await prisma.taskRun.findUnique({
-        where: { id: taskId },
-        include: { agent: true, user: true },
-    });
-
-    if (!task || task.status !== "SCHEDULED") return;
-    if (task.scheduledAt.getTime() > Date.now()) {
-        // Not actually due yet (clock drift vs stored time): re-queue.
-        dueHeap?.push({ id: taskId, at: task.scheduledAt.getTime() });
-        return;
-    }
-    if (task.scheduledAt.getTime() !== scheduledAt.getTime() && task.scheduledAt.getTime() > scheduledAt.getTime()) {
-        dueHeap?.push({ id: taskId, at: task.scheduledAt.getTime() });
-        return;
-    }
-
     try {
+        const task = await prisma.taskRun.findUnique({
+            where: { id: taskId },
+            include: { agent: true, user: true },
+        });
+
+        if (!task || task.status !== "SCHEDULED") return;
+        if (task.scheduledAt.getTime() > Date.now()) {
+            dueHeap?.push({ id: taskId, at: task.scheduledAt.getTime() });
+            return;
+        }
+        if (task.scheduledAt.getTime() !== scheduledAt.getTime() && task.scheduledAt.getTime() > scheduledAt.getTime()) {
+            dueHeap?.push({ id: taskId, at: task.scheduledAt.getTime() });
+            return;
+        }
+
         if (task.schedulingMode === "OBSERVED") {
             const observedUpdate = await prisma.taskRun.update({
                 where: { id: task.id },
@@ -208,11 +213,10 @@ async function dispatchScheduledTask(taskId: string, scheduledAt: Date): Promise
         safeLog.info("Scheduler dispatched task", { taskRunId: task.id, agentAlias: task.agent.alias });
     } catch (err) {
         safeLog.error("Scheduler failed to dispatch task", {
-            taskRunId: task.id,
+            taskRunId: taskId,
             error: err instanceof Error ? err.message : String(err),
         });
-        // Re-arm retry by pushing back into the heap on the next tick window.
-        dueHeap?.push({ id: task.id, at: Date.now() + 5_000 });
+        dueHeap?.push({ id: taskId, at: Date.now() + 5_000 });
     }
 }
 
