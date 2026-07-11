@@ -134,25 +134,30 @@ download() {
 # -----------------------------------------------------------------------------
 # Step 6: Verify checksum
 # -----------------------------------------------------------------------------
-# Downloads the per-archive .sha256 file (if present) and verifies.
-# Falls back gracefully if no checksum file exists yet.
+# Downloads the combined SHA256SUMS file from the release and verifies the
+# entry for our specific archive. Falls back gracefully if unavailable.
 verify_checksum() {
-  local archive="$1" archive_url="$2" checksum_url
+  local archive="$1" base_url="$2" sums_url fname expected_hash actual_hash
 
-  # The .sha256 file sits next to the archive in the release assets.
-  checksum_url="${archive_url}.sha256"
+  # SHA256SUMS is shipped alongside the archives in every release.
+  sums_url="${base_url}/SHA256SUMS"
 
-  info "Downloading checksum: $checksum_url"
-  if ! curl -fsSL -o /tmp/kronos-expected.sha256 "$checksum_url" 2>/dev/null; then
-    warn "No checksum file found at $checksum_url — skipping verification."
+  info "Downloading checksums: $sums_url"
+  if ! curl -fsSL -o /tmp/kronos-SHA256SUMS "$sums_url" 2>/dev/null; then
+    warn "No SHA256SUMS found at $sums_url — skipping verification."
     return 0
   fi
 
-  # The .sha256 file format: produced by `sha256sum <archive>` on the runner,
-  # so it contains the hash followed by the original filename. We only need
-  # the hash (first whitespace-separated field).
-  local expected_hash actual_hash
-  expected_hash="$(awk '{print $1}' /tmp/kronos-expected.sha256 | tr -d '[:space:]')"
+  fname="$(basename "$archive")"
+
+  # Pull the hash for OUR archive (full-line match on the filename field).
+  expected_hash="$(grep -E "([[:space:]]|^)${fname}\$" /tmp/kronos-SHA256SUMS | awk '{print $1}' | head -1)"
+
+  if [[ -z "$expected_hash" ]]; then
+    warn "No checksum entry for $fname in SHA256SUMS — skipping verification."
+    return 0
+  fi
+
   actual_hash="$(sha256sum "$archive" | awk '{print $1}')"
 
   if [[ "$expected_hash" != "$actual_hash" ]]; then
@@ -222,7 +227,7 @@ main() {
   download "$archive_url" "${tmpdir}/${archive_name}"
 
   # --- Verify ------------------------------------------------------------------
-  verify_checksum "${tmpdir}/${archive_name}" "$archive_url"
+  verify_checksum "${tmpdir}/${archive_name}" "$base_url"
 
   # --- Extract -----------------------------------------------------------------
   info "Extracting..."

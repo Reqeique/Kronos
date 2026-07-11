@@ -83,22 +83,28 @@ function Download-File {
 # Step 5: Verify checksum
 # -----------------------------------------------------------------------------
 function Verify-Checksum {
-    param([string]$ArchivePath, [string]$ArchiveUrl)
+    param([string]$ArchivePath, [string]$BaseUrl)
 
-    $checksumUrl = "$ArchiveUrl.sha256"
+    $sumsUrl = "$BaseUrl/SHA256SUMS"
 
     try {
-        Invoke-WebRequest -Uri $checksumUrl -OutFile "$ArchivePath.sha256" -UseBasicParsing -ErrorAction Stop
+        Invoke-WebRequest -Uri $sumsUrl -OutFile "$tmpdir\SHA256SUMS" -UseBasicParsing -ErrorAction Stop
     } catch {
-        Write-Warn "No checksum file found at $checksumUrl — skipping verification."
+        Write-Warn "No SHA256SUMS found at $sumsUrl — skipping verification."
         return
     }
 
-    # The .sha256 file is produced by Get-FileHash on the runner and contains
-    # only the hex hash (no filename). On Unix runners, sha256sum produces
-    # "<hash>  <filename>". Handle both formats.
-    $raw = Get-Content "$ArchivePath.sha256" -Raw
-    $expected = ($raw -split '\s+')[0].Trim()
+    $fname = Split-Path $ArchivePath -Leaf
+    # Find the line whose filename field matches our archive exactly.
+    $line = Get-Content "$tmpdir\SHA256SUMS" | Where-Object { $_ -match ([regex]::Escape($fname) + '\s*$') }
+
+    if (-not $line) {
+        Write-Warn "No checksum entry for $fname in SHA256SUMS — skipping verification."
+        return
+    }
+
+    # SHA256SUMS format: "<hash>  <filename>" (sha256sum) — take first field.
+    $expected = ($line -split '\s+')[0].Trim()
     $actual = (Get-FileHash $ArchivePath -Algorithm SHA256).Hash.ToLower()
 
     if ($expected.ToLower() -ne $actual) {
@@ -159,17 +165,17 @@ function Main {
         Download-File -Url $archiveUrl -Dest $archivePath
 
         # --- Verify --------------------------------------------------------------
-        Verify-Checksum -ArchivePath $archivePath -ArchiveUrl $archiveUrl
+        Verify-Checksum -ArchivePath $archivePath -BaseUrl $baseUrl
 
         # --- Extract -------------------------------------------------------------
         Write-Info "Extracting..."
         Expand-Archive -Path $archivePath -DestinationPath $tmpdir -Force
 
         # The archive contains a single binary: kronos-windows-amd64.exe
-        $extractedBin = Join-Path $tmpdir "kronos-${target}"
+        $extractedBin = Join-Path $tmpdir "kronos-${target}.exe"
         if (-not (Test-Path $extractedBin)) {
-            # Try without -amd64 suffix in case naming changes
-            $extractedBin = Get-ChildItem -Path $tmpdir -Filter "$BinName" -Recurse | Select-Object -First 1
+            # Fallback: find any kronos*.exe in the extracted contents.
+            $extractedBin = Get-ChildItem -Path $tmpdir -Filter "kronos*.exe" -Recurse | Select-Object -First 1
             if (-not $extractedBin) { Die "Expected binary not found in archive." }
         }
 
