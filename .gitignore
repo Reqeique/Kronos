@@ -56,6 +56,12 @@ kronos.exe
 *.bun-build
 .*.bun-build
 
+# Local release artifacts (built by scripts/build-bin.sh)
+dist/
+kronos-linux-*
+kronos-darwin-*
+kronos-windows-*
+
 # Bun lockfile (optional – remove if you want to commit it)
 bun.lock
 

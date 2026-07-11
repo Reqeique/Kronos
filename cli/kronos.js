@@ -27,6 +27,20 @@ const DEFAULT_SERVER = defaultServer();
 const CONFIG_DIR = path.join(os.homedir(), ".kronos");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
+// Version: injected at build time via KRONOS_VERSION env var (CI workflow).
+// Falls back to reading package.json when running via node in dev.
+const VERSION = (() => {    const envVersion = (process.env.KRONOS_VERSION || "").trim();
+    if (envVersion) return envVersion;
+    try {
+        const pkgPath = path.join(__dirname, "..", "package.json");
+        if (fs.existsSync(pkgPath)) {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+            if (pkg.version) return pkg.version;
+        }
+    } catch { /* ignore – likely compiled binary with no package.json */ }
+    return "0.0.0-unknown";
+})();
+
 const DEFAULTS = {
     server: DEFAULT_SERVER,
     port: DEFAULT_PORT,
@@ -35,10 +49,11 @@ const DEFAULTS = {
 };
 
 function printHelp() {
-    console.log(`kronos CLI
+    console.log(`kronos CLI (v${VERSION})
 
 Usage:
   kronos                                  shows this help
+  kronos --version                        print version and exit
   kronos up [--server <url>] [--alias <a>] [--dev]   boot dev/start server + run agent
   kronos serve [--server <url>] [--dev]    boot dev/start server and block
   kronos down                             stop a dev server spawned by this CLI
@@ -2300,6 +2315,11 @@ async function main() {
     const [, , command, ...rawArgs] = process.argv;
     if (!command || command === "help" || command === "--help" || command === "-h") {
         printHelp();
+        return;
+    }
+
+    if (command === "--version" || command === "-V" || command === "version") {
+        console.log(`kronos ${VERSION}`);
         return;
     }
 

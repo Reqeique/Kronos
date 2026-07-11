@@ -29,6 +29,68 @@ Kronos is a scheduler/orchestration dashboard for running agent tasks through AC
 
 ## Setup
 
+### Option 1 — Install the standalone CLI (recommended)
+
+Skip Node, Bun, and the Kronos checkout entirely. The CLI bundles the full Bun runtime into a single executable.
+
+**macOS / Linux:**
+
+```bash
+curl -fsSL https://github.com/Reqeique/Kronos/releases/latest/download/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://github.com/Reqeique/Kronos/releases/latest/download/install.ps1 | iex
+```
+
+That's it — `kronos` is now on your `PATH`. Verify with:
+
+```bash
+kronos --version
+```
+
+To install a specific version (instead of latest), set `KRONOS_VERSION` before piping:
+
+```bash
+curl -fsSL https://github.com/Reqeique/Kronos/releases/latest/download/install.sh | KRONOS_VERSION=v1.2.0 bash
+```
+
+To install into a custom directory:
+
+```bash
+curl -fsSL https://github.com/Reqeique/Kronos/releases/latest/download/install.sh | KRONOS_INSTALL_DIR=$HOME/bin bash
+```
+
+#### Updating
+
+Re-running the same one-liner always installs the current latest version and overwrites the existing binary:
+
+```bash
+curl -fsSL https://github.com/Reqeique/Kronos/releases/latest/download/install.sh | bash
+```
+
+#### Uninstalling
+
+The binary lives at `~/.local/bin/kronos` (macOS/Linux) or `%LOCALAPPDATA%\kronos\kronos.exe` (Windows). Remove that file to uninstall.
+
+#### Manual download
+
+If you'd rather grab the archive yourself:
+
+| Platform | File |
+|---|---|
+| Linux x86_64 | `kronos-linux-amd64.tar.gz` |
+| Linux ARM64 | `kronos-linux-arm64.tar.gz` |
+| macOS Intel | `kronos-darwin-amd64.tar.gz` |
+| macOS Apple Silicon | `kronos-darwin-arm64.tar.gz` |
+| Windows x86_64 | `kronos-windows-amd64.zip` |
+
+Verify integrity with `sha256sum -c SHA256SUMS` after downloading `SHA256SUMS` from the same release.
+
+### Option 2 — Run from source (developers)
+
 ```powershell
 npm i
 npm run db:push

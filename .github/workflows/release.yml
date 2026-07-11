@@ -1,0 +1,246 @@
+# =============================================================================
+# Kronos Release Pipeline
+# -----------------------------------------------------------------------------
+# Builds platform-specific standalone executables (via Bun --compile) whenever
+# a `v*` tag is pushed, generates SHA256 checksums, and publishes everything
+# to a GitHub Release.
+#
+# Why GitHub Releases (not GitHub Packages)?
+#   GitHub Packages is a *package registry* (npm, container, maven, nuget).
+#   It requires authentication to download, has no "latest asset" concept,
+#   and makes per-platform download URLs awkward. GitHub Releases gives us:
+#     - Public, unauthenticated, predictable download URLs:
+#         https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>
+#     - A automatic "latest" redirect for install scripts.
+#     - gh CLI support and checksums via release assets.
+#   This is the GitHub-native standard for distributing standalone binaries.
+#
+# Matrix: each platform target runs on a runner whose OS matches the target
+# (Bun cross-compiles the bun runtime into the single-file executable).
+#
+# Triggers:
+#   - push of any tag matching v* (e.g. v1.0.0, v1.2.0-beta.1)
+#   - workflow_dispatch for manual testing without creating a tag
+# =============================================================================
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: 'Create a draft release (no tag publish)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+# Permissions needed for the GITHUB_TOKEN:
+#   contents: write  — create the GitHub Release and upload assets
+#   packages: write  — not needed (GitHub Releases, not Packages) kept for future
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build job — produces one artifact per (target-os, target-arch) via matrix.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false   # Don't cancel other builds if one fails
+      matrix:
+        include:
+          # Linux x86_64
+          - target: linux-amd64
+            bun_target: bun-linux-x64
+            outfile: kronos-linux-amd64
+            runner: ubuntu-latest
+            archive: kronos-linux-amd64.tar.gz
+          # Linux ARM64 (aarch64)
+          - target: linux-arm64
+            bun_target: bun-linux-arm64
+            outfile: kronos-linux-arm64
+            runner: ubuntu-latest
+            archive: kronos-linux-arm64.tar.gz
+          # macOS Intel
+          - target: darwin-amd64
+            bun_target: bun-darwin-x64
+            outfile: kronos-darwin-amd64
+            runner: macos-13
+            archive: kronos-darwin-amd64.tar.gz
+          # macOS Apple Silicon
+          - target: darwin-arm64
+            bun_target: bun-darwin-arm64
+            outfile: kronos-darwin-arm64
+            runner: macos-latest
+            archive: kronos-darwin-arm64.tar.gz
+          # Windows x86_64
+          - target: windows-amd64
+            bun_target: bun-windows-x64
+            outfile: kronos-windows-amd64.exe
+            runner: windows-latest
+            archive: kronos-windows-amd64.zip
+
+    steps:
+      # --- Checkout --------------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- Bun -------------------------------------------------------------------
+      # We pin Bun to the version the project is developed against.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # --- Install deps ---------------------------------------------------------
+      # We only need the JS deps that the CLI bundles; Prisma generates happen
+      # at runtime, so no db steps here.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile || bun install
+
+      # --- Build ----------------------------------------------------------------
+      # Bun --compile creates a single-file executable embedding the bun runtime.
+      # --external better-sqlite3 keeps the native addon out of the bundle
+      # (it's lazy-loaded in the CLI and not needed for standalone use).
+      # --define wires the version as a compile-time constant into the binary.
+      - name: Build (${{ matrix.bun_target }})
+        env:
+          # Strip the leading 'v' so the binary reports semver, not "v1.2.0"
+          KRONOS_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '0.0.0-dev' }}
+        run: bun build --compile --target=${{ matrix.bun_target }} --external better-sqlite3 --define "process.env.KRONOS_VERSION=\"${KRONOS_VERSION#v}\"" ./cli/kronos.js --outfile ${{ matrix.outfile }}
+
+      # --- Archive ---------------------------------------------------------------
+      # Wrap the binary with tar.gz (Unix) or zip (Windows) so the release
+      # assets are consistent and compressed.
+      - name: Archive (Unix)
+        if: matrix.target != 'windows-amd64'
+        run: tar -czf ${{ matrix.archive }} ${{ matrix.outfile }}
+
+      - name: Archive (Windows)
+        if: matrix.target == 'windows-amd64'
+        shell: pwsh
+        run: Compress-Archive -Path ${{ matrix.outfile }} -DestinationPath ${{ matrix.archive }} -Force
+
+      # Individual checksum for this platform's archive
+      - name: Compute checksum (Unix)
+        if: matrix.target != 'windows-amd64'
+        run: sha256sum ${{ matrix.archive }} > ${{ matrix.archive }}.sha256
+
+      - name: Compute checksum (Windows)
+        if: matrix.target == 'windows-amd64'
+        shell: pwsh
+        run: Get-FileHash ${{ matrix.archive }} -Algorithm SHA256 | Select-Object -ExpandProperty Hash > ${{ matrix.archive }}.sha256
+
+      # --- Upload build artifact ------------------------------------------------
+      # Upload per-job so the release job can aggregate everything.
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.target }}
+          path: |
+            ${{ matrix.archive }}
+            ${{ matrix.archive }}.sha256
+
+  # ---------------------------------------------------------------------------
+  # Release job — aggregates all build artifacts, generates a combined
+  # SHA256SUMS file, and creates/updates the GitHub Release.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    # Only create a release when triggered by a tag push or manual "false" draft
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- Download all building artifacts --------------------------------------
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: build-*
+          merge-multiple: false
+
+      # --- Flatten & structure --------------------------------------------------
+      # Move all archives to a single flat dir, generate combined SHA256SUMS.
+      - name: Flatten artifacts & generate SHA256SUMS
+        run: |
+          mkdir -p dist
+          find release-assets -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec cp {} dist/ \;
+
+          # Generate a single combined SHA256SUMS file for all archives.
+          cd dist
+          rm -f SHA256SUMS
+          for f in *.tar.gz *.zip; do
+            [ -f "$f" ] || continue
+            sha256sum "$f" >> SHA256SUMS
+          done
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+
+      # --- Copy installer scripts into release assets ---------------------------
+      # This lets the install scripts reference themselves from the release
+      # (e.g. curl .../install.sh | bash) without requiring a separate hosting.
+      - name: Copy install scripts
+        run: |
+          cp install.sh  dist/
+          cp install.ps1 dist/
+
+      # --- Create / update GitHub Release --------------------------------------
+      # softprops/action-gh-release is the de facto standard action for this:
+      # supports globbing, draft, generate_release_notes, and idempotency.
+      # When triggered by a tag push, github.ref is the tag (used as the tag_name).
+      # When triggered manually, we create a draft release with the current commit.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('draft-{0}', github.sha) }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS
+            dist/install.sh
+            dist/install.ps1
+          body: |
+            ## Kronos ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'draft build' }}
+
+            Download the archive for your platform, extract, and place `kronos` on your `PATH`.
+
+            ### One-line install
+
+            **macOS / Linux:**
+            ```bash
+            curl -fsSL https://github.com/Reqeique/Kronos/releases/latest/download/install.sh | bash
+            ```
+
+            **Windows (PowerShell):**
+            ```powershell
+            irm https://github.com/Reqeique/Kronos/releases/latest/download/install.ps1 | iex
+            ```
+
+            ### Manual download
+
+            | Platform | File |
+            |---|---|
+            | Linux x86_64 | `kronos-linux-amd64.tar.gz` |
+            | Linux ARM64 | `kronos-linux-arm64.tar.gz` |
+            | macOS Intel | `kronos-darwin-amd64.tar.gz` |
+            | macOS Apple Silicon | `kronos-darwin-arm64.tar.gz` |
+            | Windows x86_64 | `kronos-windows-amd64.zip` |
+
+            Verify with `sha256sum -c SHA256SUMS` (or check individual `.sha256` files).
+          token: ${{ secrets.GITHUB_TOKEN }}
