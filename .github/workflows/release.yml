@@ -116,7 +116,13 @@ jobs:
       # (expanded by Actions BEFORE the shell runs), NOT with shell parameter
       # expansion like ${VAR#v}. The latter breaks on the Windows runner, whose
       # default shell is PowerShell and does not understand bash's ${VAR#v}.
+      #
+      # We force `shell: bash` on this step so the --define quoting ("\"" for the
+      # string value) is interpreted consistently on every runner (git-bash is
+      # preinstalled even on windows-latest). Without this, PowerShell mangles
+      # the escaped quotes and Bun sees a stray entry-point argument.
       - name: Build (${{ matrix.bun_target }})
+        shell: bash
         env:
           # github.ref_name is the tag WITHOUT "refs/tags/" (e.g. "v1.2.0").
           # The CLI strips the leading "v" itself for `kronos --version`.
