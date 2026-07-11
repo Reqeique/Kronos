@@ -187,9 +187,11 @@ function Main {
         }
 
         # --- Install -------------------------------------------------------------
+        # $extractedBin is a plain path string (Join-Path) or a FileInfo
+        # (Get-ChildItem fallback). Copy-Item accepts either, so pass it directly.
         $dest = Join-Path $installDir $BinName
         Write-Info "Installing to $dest"
-        Copy-Item -Path $extractedBin.FullName -Destination $dest -Force
+        Copy-Item -Path $extractedBin -Destination $dest -Force
 
         # --- Ensure on PATH ------------------------------------------------------
         Ensure-OnPath -Dir $installDir
