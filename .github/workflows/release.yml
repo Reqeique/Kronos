@@ -70,10 +70,14 @@ jobs:
             runner: ubuntu-latest
             archive: kronos-linux-arm64.tar.gz
           # macOS Intel
+          # NOTE: Built on ubuntu-latest, NOT macos-13. The macos-13 (Intel)
+          # GitHub-hosted runner is heavily contended and frequently stalls for
+          # 15-30+ minutes "Waiting for a runner". Bun cross-compiles the
+          # darwin-x64 binary from Linux just fine, so we avoid that bottleneck.
           - target: darwin-amd64
             bun_target: bun-darwin-x64
             outfile: kronos-darwin-amd64
-            runner: macos-13
+            runner: ubuntu-latest
             archive: kronos-darwin-amd64.tar.gz
           # macOS Apple Silicon
           - target: darwin-arm64
