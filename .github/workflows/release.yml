@@ -111,11 +111,17 @@ jobs:
       # --external better-sqlite3 keeps the native addon out of the bundle
       # (it's lazy-loaded in the CLI and not needed for standalone use).
       # --define wires the version as a compile-time constant into the binary.
+      #
+      # NOTE: the version is injected with the GitHub expression ${{ env.KRONOS_VERSION }}
+      # (expanded by Actions BEFORE the shell runs), NOT with shell parameter
+      # expansion like ${VAR#v}. The latter breaks on the Windows runner, whose
+      # default shell is PowerShell and does not understand bash's ${VAR#v}.
       - name: Build (${{ matrix.bun_target }})
         env:
-          # Strip the leading 'v' so the binary reports semver, not "v1.2.0"
+          # github.ref_name is the tag WITHOUT "refs/tags/" (e.g. "v1.2.0").
+          # The CLI strips the leading "v" itself for `kronos --version`.
           KRONOS_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '0.0.0-dev' }}
-        run: bun build --compile --target=${{ matrix.bun_target }} --external better-sqlite3 --define "process.env.KRONOS_VERSION=\"${KRONOS_VERSION#v}\"" ./cli/kronos.js --outfile ${{ matrix.outfile }}
+        run: bun build --compile --target=${{ matrix.bun_target }} --external better-sqlite3 --define "process.env.KRONOS_VERSION=\"${{ env.KRONOS_VERSION }}\"" ./cli/kronos.js --outfile ${{ matrix.outfile }}
 
       # --- Archive ---------------------------------------------------------------
       # Wrap the binary with tar.gz (Unix) or zip (Windows) so the release

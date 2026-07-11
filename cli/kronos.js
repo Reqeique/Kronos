@@ -26,10 +26,11 @@ function defaultServer() {
 const DEFAULT_SERVER = defaultServer();
 const CONFIG_DIR = path.join(os.homedir(), ".kronos");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
-
 // Version: injected at build time via KRONOS_VERSION env var (CI workflow).
 // Falls back to reading package.json when running via node in dev.
-const VERSION = (() => {    const envVersion = (process.env.KRONOS_VERSION || "").trim();
+// The leading "v" is stripped so `kronos --version` reports clean semver.
+const VERSION = (() => {
+    const envVersion = (process.env.KRONOS_VERSION || "").trim().replace(/^v/, "");
     if (envVersion) return envVersion;
     try {
         const pkgPath = path.join(__dirname, "..", "package.json");
