@@ -26,6 +26,27 @@
 .calendar-view {
     height: 100%;
 }
+
+/* ─── Calendar compare sandbox (short-lived tasks) ─────── */
+.calendar-view--floor .sx-time-grid-event {
+    min-height: 18px;
+}
+
+.calendar-view--extend .sx-time-grid-event {
+    min-height: 18px;
+}
+
+.calendar-view--current .sx-time-grid-event {
+    /* baseline: no min-height (current production behaviour) */
+}
+
+.sx-event-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+}
+
 /* ─── Login page ─────────────────────────────────────── */
 .login-page {
     min-height: 100vh;
