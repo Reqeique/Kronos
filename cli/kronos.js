@@ -1073,7 +1073,17 @@ async function ensureServerRunning({ server, log, mode = "prod", pollMs = 1500, 
             spawned: false,
             alreadyRunning: false,
             error: "no-checkout",
-            message: "No Kronos checkout found. Place the kronos CLI in a folder with package.json (name=\"kronos\") or set KRONOS_INSTALL_DIR.",
+            message:
+                "No Kronos checkout found. The `up`/`serve`/`setup` commands bootstrap the " +
+                "Next.js dashboard server, which needs the Kronos source tree.\n\n" +
+                "  Pick one:\n" +
+                "  1) Run the dashboard yourself — clone the repo and run from inside it:\n" +
+                "       git clone https://github.com/Reqeique/Kronos.git && cd Kronos\n" +
+                "       npm i && npm run db:push && npm run dev\n" +
+                "     then use this same `kronos` binary from that folder for `up`/`setup`.\n\n" +
+                "  2) Just run the agent/worker against an already-running server (no checkout needed):\n" +
+                "       kronos agent --server <url> --token <token> --alias <alias>\n\n" +
+                "  (You can also set KRONOS_INSTALL_DIR to point at a Kronos checkout.)",
         };
     }
 

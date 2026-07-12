@@ -30,6 +30,12 @@ To install a specific version: `KRONOS_VERSION=v1.2.0 curl …/install.sh | bash
 To update: re-run the same one-liner. To uninstall: delete `~/.local/bin/kronos`
 (macOS/Linux) or `%LOCALAPPDATA%\kronos\kronos.exe` (Windows).
 
+> **What the standalone binary is for:** running the **agent/worker** (`kronos agent`,
+> `watch-stdio`, `proxy`) against a Kronos server — no Node/Bun/checkout needed.
+> The `up` / `serve` / `setup` commands bootstrap the Next.js **dashboard server**,
+> which requires the Kronos source checkout. For those, clone the repo and run the
+> binary from inside it (or point `KRONOS_INSTALL_DIR` at a checkout).
+
 ## What it does
 
 | Area | Feature | Status |
@@ -65,6 +71,12 @@ To update: re-run the same one-liner. To uninstall: delete `~/.local/bin/kronos`
 
 > Running from source instead? `npm i && npm run db:push && npm run dev`,
 > then `npm run kronos setup`.
+
+**Worker-only (any machine, no checkout):** point the agent at a running server:
+
+```bash
+kronos agent --server https://your-kronos.host --token <token> --alias oc
+```
 
 ## ACP notes
 
