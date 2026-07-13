@@ -942,6 +942,17 @@ function findKronosCheckout() {
     const defaultCheckout = defaultCheckoutDir();
     if (isKronosCheckout(defaultCheckout)) return defaultCheckout;
 
+    // Fallback: infer checkout from the config file location.
+    // On Windows, os.homedir() can behave unexpectedly in a Bun-compiled binary.
+    // We know config lives at ~/.kronos/config.json; its parent is the .kronos dir.
+    try {
+        const configPath = path.join(os.homedir(), ".kronos", "config.json");
+        if (fs.existsSync(configPath)) {
+            const inferredCheckout = path.join(path.dirname(configPath), "checkout");
+            if (isKronosCheckout(inferredCheckout)) return inferredCheckout;
+        }
+    } catch { /* ignore */ }
+
     const argv1 = process.argv[1] || "";
     const binDir = argv1 ? path.dirname(path.resolve(argv1)) : "";
     if (binDir) {
