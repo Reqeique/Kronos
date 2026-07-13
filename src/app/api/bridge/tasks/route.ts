@@ -112,19 +112,6 @@ export async function GET(req: NextRequest) {
                 }
             });
 
-            // Polling fallback: in production mode, the scheduler may run in
-            // a different worker than this SSE handler, so eventBus events
-            // never arrive. Poll every 5s to catch dispatched tasks.
-            const duePollInterval = setInterval(async () => {
-                if (closed) { clearInterval(duePollInterval); return; }
-                try {
-                    const task = await findRunnableTaskForAlias(bridge.userId, alias);
-                    sendTask(task);
-                } catch {
-                    // Ignore transient errors in poll
-                }
-            }, 5_000);
-
             const keepAlive = setInterval(() => {
                 if (closed) { clearInterval(keepAlive); return; }
                 try {
@@ -132,13 +119,16 @@ export async function GET(req: NextRequest) {
                 } catch {
                     closed = true;
                     clearInterval(keepAlive);
+                    unsubscribe();
                 }
             }, 30_000);
 
+            // Push delivery is handled by eventBus (anchored to globalThis
+            // via Symbol.for so all Next.js bundles share one EventEmitter).
+            // See src/lib/eventBus.ts.
             cleanup = () => {
                 closed = true;
                 unsubscribe();
-                clearInterval(duePollInterval);
                 clearInterval(keepAlive);
             };
         },

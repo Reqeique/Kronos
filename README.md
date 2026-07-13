@@ -1,95 +1,108 @@
 # Kronos
 
-Kronos is a scheduler/orchestration dashboard for running agent tasks through ACP with the `kronos` bridge CLI.
+A scheduler/orchestration dashboard for running agent tasks through ACP with the `kronos` bridge CLI.
 
-## Implemented Features
+## Install
 
-| Area | Feature | Status | Notes |
-|---|---|---|---|
-| Scheduling | Agent task scheduling from dashboard | Implemented | Create tasks with schedule, mode, timeout, and optional Slack channel |
-| Lifecycle | Task state tracking (`SCHEDULED -> DISPATCHED -> IN_PROGRESS -> terminal`) | Implemented | Lifecycle synced through ACP event ingestion |
-| Queue Delivery | Streamable HTTP queue for workers | Implemented | `watch-queue` consumes `/api/bridge/tasks` by default |
-| Queue Delivery | Polling queue fallback | Implemented | `--queue-transport polling --poll-ms <n>` |
-| CLI Bridge | ACP stdio bridge and driven ACP mode | Implemented | `watch-stdio` and `watch-stdio --drive-acp` |
-| Mentions (UI) | `@` file autocomplete in New Task description | Implemented | Project-file suggestions from authenticated API |
-| Mentions (CLI) | Prompt mention preprocessing for `@...` paths | Implemented | Enabled by default, disable via `--no-mention-preprocess` |
-| Auth | Bridge token minting + alias-scoped worker auth | Implemented | Tokens issued via `/api/bridge/token` |
-| Observability | Real-time dashboard event stream | Implemented | SSE endpoint for task updates |
-| Observability | ACP session title display | Implemented | Automatically display agent-generated session title in place of task prompt in task lists and calendar views |
+One command — no Node, Bun, or checkout required. The CLI is a single standalone
+binary that bundles the Bun runtime.
 
-## Coming Soon
+**macOS / Linux:**
 
-| Area | Feature | Status | Notes |
-|---|---|---|---|
-| Worker Safety | Cross-process dedupe/lease locking for same alias | Coming Soon | Prevent duplicate execution across multiple watcher processes |
-| Mentions (UX) | Rich mention picker UI (grouping, fuzzy ranking, keyboard hints) | Coming Soon | Improve discovery in long repos |
-| Queue Control | Per-agent concurrency limits and rate shaping | Coming Soon | Better control for provider/API limits |
-| Reliability | Dead-letter/retry policies for failed queue deliveries | Coming Soon | Safer recovery for transient failures |
-| Telemetry | Worker/session analytics and throughput dashboards | Coming Soon | Visibility into queue lag, run time, and failures |
-
-## Setup
-
-```powershell
-npm i
-npm run db:push
-npm run dev
+```bash
+curl -fsSL https://github.com/Reqeique/Kronos/releases/latest/download/install.sh | bash
 ```
 
-Open `http://localhost:3737/login` (default port `3737`), register an account, and sign in.
+**Windows (PowerShell):**
 
-## Dashboard Preview
+```powershell
+irm https://github.com/Reqeique/Kronos/releases/latest/download/install.ps1 | iex
+```
 
-### Overview (Light Mode)
-![Kronos Overview Light](docs/assets/screenshots-light/01-dashboard-overview-light.png)
+Verify and get started:
 
-### Task Runs (Light Mode)
-![Kronos Task Runs Light](docs/assets/screenshots-light/02-dashboard-task-runs-light.png)
+```bash
+kronos --version
+kronos --help
+```
 
-### Calendar (Light Mode)
-![Kronos Calendar Light](docs/assets/screenshots-light/03-calendar-light.png)
+To install a specific version: `KRONOS_VERSION=v1.2.0 curl …/install.sh | bash`
+To update: re-run the same one-liner. To uninstall: delete `~/.local/bin/kronos`
+(macOS/Linux) or `%LOCALAPPDATA%\kronos\kronos.exe` (Windows).
 
-## Real App Workflow
+> **What the standalone binary is for:** running the **agent/worker** (`kronos agent`,
+> `watch-stdio`, `proxy`) against a Kronos server — no Node/Bun/checkout needed.
+> The `up` / `serve` / `setup` commands bootstrap the Next.js **dashboard server**,
+> which requires the Kronos source checkout. For those, clone the repo and run the
+> binary from inside it (or point `KRONOS_INSTALL_DIR` at a checkout).
+
+## What it does
+
+| Area | Feature | Status |
+|---|---|---|
+| Scheduling | Agent task scheduling from dashboard | Implemented |
+| Lifecycle | Task state tracking (`SCHEDULED → DISPATCHED → IN_PROGRESS → terminal`) | Implemented |
+| Queue | Streamable-HTTP delivery (`watch-queue`) + polling fallback | Implemented |
+| CLI Bridge | ACP stdio bridge and driven ACP mode (`watch-stdio`, `--drive-acp`) | Implemented |
+| Mentions | `@` file autocomplete in task descriptions (UI + CLI preprocessing) | Implemented |
+| Auth | Bridge-token minting + alias-scoped worker auth | Implemented |
+| Observability | Real-time SSE event stream + ACP session titles | Implemented |
+
+## Quick start
 
 1. Open `http://localhost:3737/dashboard`.
-2. Register an agent alias in **Settings** (e.g. `oc`).
+2. In **Settings**, register an agent alias (e.g. `oc`).
 3. Under **Bridge Tokens**, generate a token and copy it.
-4. Run the interactive TUI setup wizard:
+4. Run the interactive setup wizard:
 
-```powershell
-npm run kronos setup
-```
-The wizard will guide you to save the token and select your agent configuration.
+   ```bash
+   kronos setup
+   ```
 
 5. Boot the server and your agent in one command:
 
-```powershell
-npm run kronos up -- --alias oc --verbose
+   ```bash
+   kronos up -- --alias oc --verbose
+   ```
+
+6. In the dashboard, create a task assigned to `@oc`. Type `@` in the
+   description to autocomplete project files. Status flows live as lifecycle
+   events arrive.
+
+> Running from source instead? `npm i && npm run db:push && npm run dev`,
+> then `npm run kronos setup`.
+
+**Worker-only (any machine, no checkout):** point the agent at a running server:
+
+```bash
+kronos agent --server https://your-kronos.host --token <token> --alias oc
 ```
-*(If you compiled the binary, you can run `./kronos setup` and `./kronos up` directly!)*
 
-6. Back in the dashboard, create a new task assigned to `@oc`.
-   - In **Task Description**, type `@` to autocomplete project file paths.
-7. Task status flows in UI as lifecycle events arrive (`SCHEDULED` -> `DISPATCHED` -> `IN_PROGRESS` -> terminal status).
+## ACP notes
 
-## ACP Notes
+- `kronos up` / `kronos agent` pick active tasks for the alias and forward ACP
+  lifecycle events to `/api/acp/events`.
+- Queue delivery defaults to Streamable HTTP (`GET /api/bridge/tasks`); use
+  `--queue-transport polling --poll-ms 3000` for legacy polling.
+- `watch-stdio --drive-acp` preprocesses `@…` mentions into project-file
+  paths (`--no-mention-preprocess` to disable).
 
-- `kronos up` / `kronos agent` continuously picks active tasks for the alias and forwards ACP lifecycle events to `/api/acp/events`.
-- Streamable HTTP queue delivery is used by default (`GET /api/bridge/tasks`).
-- Use `--queue-transport polling --poll-ms 3000` to force legacy polling mode.
-- Keep the watcher terminal running while tasks are being processed.
-- Use `watch-stdio` only if you are wiring your own ACP NDJSON stream manually.
-- `watch-queue` / `watch-stdio --drive-acp` preprocess `@...` mentions in prompt text and resolve to project files (`--no-mention-preprocess` to disable).
+## Useful commands
 
-## Useful Commands
-
-```powershell
-npm run build
-npm run start
-npm run db:studio
-npm run kronos -- --help
+```bash
+kronos --help          # full command reference
+kronos setup           # interactive TUI wizard
+kronos agent --alias oc
+kronos up              # server + agent in one process
 ```
+
+## Releasing
+
+Standalone binaries for Linux (x64/arm64), macOS (Intel/Apple Silicon), and
+Windows (x64) are built automatically on every `v*` tag and published to
+[GitHub Releases](https://github.com/Reqeique/Kronos/releases). See
+[`docs/RELEASE.md`](docs/RELEASE.md) for the full pipeline and settings.
 
 ## License
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE).
-

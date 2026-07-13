@@ -26,6 +26,21 @@ function defaultServer() {
 const DEFAULT_SERVER = defaultServer();
 const CONFIG_DIR = path.join(os.homedir(), ".kronos");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
+// Version: injected at build time via KRONOS_VERSION env var (CI workflow).
+// Falls back to reading package.json when running via node in dev.
+// The leading "v" is stripped so `kronos --version` reports clean semver.
+const VERSION = (() => {
+    const envVersion = (process.env.KRONOS_VERSION || "").trim().replace(/^v/, "");
+    if (envVersion) return envVersion;
+    try {
+        const pkgPath = path.join(__dirname, "..", "package.json");
+        if (fs.existsSync(pkgPath)) {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+            if (pkg.version) return pkg.version;
+        }
+    } catch { /* ignore – likely compiled binary with no package.json */ }
+    return "0.0.0-unknown";
+})();
 
 const DEFAULTS = {
     server: DEFAULT_SERVER,
@@ -35,14 +50,18 @@ const DEFAULTS = {
 };
 
 function printHelp() {
-    console.log(`kronos CLI
+    console.log(`kronos CLI (v${VERSION})
 
 Usage:
   kronos                                  shows this help
+  kronos --version                        print version and exit
   kronos up [--server <url>] [--alias <a>] [--dev]   boot dev/start server + run agent
   kronos serve [--server <url>] [--dev]    boot dev/start server and block
   kronos down                             stop a dev server spawned by this CLI
   kronos setup                            launches the interactive TUI wizard
+  kronos init                             bootstrap the Kronos dashboard source (clone + install + DB);
+                                            run this once if running the standalone binary and \`up\` says
+                                            'No Kronos checkout found'
   kronos login --token <token> [--server <url>]
   kronos proxy --agent <"command"> --alias <alias> [--token <token>] [--server <url>] [--dev]
   kronos watch-stdio --alias <alias> [--token <token>] [--server <url>] [--drive-acp] [--agent <"command">] [--cwd <path>] [--dev]
@@ -915,6 +934,25 @@ function findKronosCheckout() {
         if (isKronosCheckout(env)) return env;
     }
 
+    if (process.env.KRONOS_CHECKOUT_DIR) {
+        const env = path.resolve(process.env.KRONOS_CHECKOUT_DIR);
+        if (isKronosCheckout(env)) return env;
+    }
+
+    const defaultCheckout = defaultCheckoutDir();
+    if (isKronosCheckout(defaultCheckout)) return defaultCheckout;
+
+    // Fallback: infer checkout from the config file location.
+    // On Windows, os.homedir() can behave unexpectedly in a Bun-compiled binary.
+    // We know config lives at ~/.kronos/config.json; its parent is the .kronos dir.
+    try {
+        const configPath = path.join(os.homedir(), ".kronos", "config.json");
+        if (fs.existsSync(configPath)) {
+            const inferredCheckout = path.join(path.dirname(configPath), "checkout");
+            if (isKronosCheckout(inferredCheckout)) return inferredCheckout;
+        }
+    } catch { /* ignore */ }
+
     const argv1 = process.argv[1] || "";
     const binDir = argv1 ? path.dirname(path.resolve(argv1)) : "";
     if (binDir) {
@@ -923,6 +961,238 @@ function findKronosCheckout() {
     }
 
     return null;
+}
+
+// -----------------------------------------------------------------------------
+// Bootstrap a Kronos checkout when none is found locally.
+// -----------------------------------------------------------------------------
+// The standalone binary lives at ~/.local/bin (or %LOCALAPPDATA%\kronos) which
+// is NOT a Kronos checkout. `up`/`serve`/`setup` need the Next.js source tree
+// to spawn the dashboard server. `kronos init` (and `up`/`setup` interactively)
+// clone the public repo into a stable location and run install + prisma setup
+// so the server can boot — no manual `git clone`/`npm i` required of the user.
+//
+// Override the clone destination with KRONOS_CHECKOUT_DIR (default ~/.kronos/checkout).
+// Override the repo URL with KRONOS_REPO_URL (default the public GitHub repo).
+
+const DEFAULT_REPO_URL = "https://github.com/Reqeique/Kronos.git";
+
+function defaultCheckoutDir() {
+    const override = (process.env.KRONOS_CHECKOUT_DIR || "").trim();
+    if (override) return path.resolve(override);
+    return path.join(CONFIG_DIR, "checkout");
+}
+
+function detectGit() {
+    try {
+        const out = spawnSync("git", ["--version"], { stdio: "pipe", windowsHide: true });
+        return out.status === 0;
+    } catch {
+        return false;
+    }
+}
+
+function commandExists(cmd) {
+    try {
+        const out = spawnSync(cmd, ["--version"], { stdio: "pipe", windowsHide: true });
+        return out.status === 0;
+    } catch {
+        return false;
+    }
+}
+
+// Lazy @clack/prompts loader (pure ESM, dynamic-import works in Node CJS and
+// the bun-compiled binary).
+async function loadPrompts() {
+    try {
+        return await import("@clack/prompts");
+    } catch (message) {
+        throw new Error(
+            `Missing @clack/prompts dependency. The standalone binary bundles it; if running from source, install with: npm i @clack/prompts. Original error: ${message}`,
+        );
+    }
+}
+
+// Clone (or refresh) a Kronos checkout and run install + prisma setup.
+// opts:
+//   dir        — target checkout dir (default ~/.kronos/checkout)
+//   repoUrl    — git URL (default DEFAULT_REPO_URL)
+//   log        — logger fn
+//   noInstall  — skip npm/bun install + prisma steps (when caller manages them)
+//   nonFatal   — if a step fails, return an error object instead of throwing
+// Returns: { dir, reused } or { error, message }
+async function bootstrapCheckout(opts = {}) {
+    const dir = opts.dir || defaultCheckoutDir();
+    const repoUrl = (opts.repoUrl || process.env.KRONOS_REPO_URL || DEFAULT_REPO_URL).trim();
+    const log = opts.log || ((m) => console.log(m));
+    const runner = detectPackageRunner();
+    const git = detectGit();
+
+    if (!git) {
+        return {
+            error: "no-git",
+            message:
+                "Bootstrap needs `git` on PATH to clone the Kronos source.\n" +
+                "Install Git (https://git-scm.com) and re-run, or clone manually:\n" +
+                `  git clone ${repoUrl} "${dir}" && cd "${dir}" && npm i && npm run db:push`,
+        };
+    }
+    if (!runner) {
+        return {
+            error: "no-runner",
+            message:
+                "Bootstrap needs a JS package runner (`bun` or `npm`) on PATH to install + build.\n" +
+                "Install Node (https://nodejs.org) or Bun (https://bun.sh), then re-run `kronos init`.",
+        };
+    }
+
+    const alreadyThere = isKronosCheckout(dir);
+    if (alreadyThere) {
+        log?.(`[kronos] Reusing existing checkout at ${dir}`);
+        // Try a fast `git pull` to stay current. Non-fatal.
+        try {
+            log?.(`[kronos] $ git pull (in ${dir})`);
+            const pull = spawnSync("git", ["pull", "--ff-only"], {
+                cwd: dir, stdio: "pipe", windowsHide: true, shell: process.platform === "win32",
+            });
+            if (pull.status !== 0) {
+                log?.(`[kronos] (git pull skipped — non-fatal)`);
+            }
+        } catch {
+            /* non-fatal */
+        }
+    } else {
+        // Make sure the parent dir exists
+        fs.mkdirSync(path.dirname(dir), { recursive: true });
+        if (fs.existsSync(dir) && fs.readdirSync(dir).length > 0) {
+            return {
+                error: "dir-not-empty",
+                message: `Target directory not empty and not a Kronos checkout: ${dir}\nMove/remove it or set KRONOS_CHECKOUT_DIR.`,
+            };
+        }
+        log?.(`[kronos] Cloning ${repoUrl} -> ${dir} ...`);
+        const clone = spawnSync("git", ["clone", "--depth", "1", repoUrl, dir], {
+            stdio: "inherit", windowsHide: true, shell: process.platform === "win32",
+        });
+        if (clone.status !== 0) {
+            return {
+                error: "clone-failed",
+                message: `git clone failed (exit ${clone.status}). Check the URL/network, or clone manually:\n  git clone ${repoUrl} "${dir}"`,
+            };
+        }
+    }
+
+    if (!opts.noInstall) {
+        // Install deps (prefer bun for speed)
+        log?.(`[kronos] Installing dependencies (${runner} install) ...`);
+        await runRunnerAwait(["install"], dir, log);
+
+        // Prisma: generate client + push schema into SQLite
+        // Use npx so we don't assume global prisma.
+        const npxCmd = commandExists("npx") ? "npx" : (runner === "bun" ? "bunx" : "npx");
+        log?.(`[kronos] $ ${npxCmd} prisma generate  (in ${dir})`);
+        const gen = spawnSync(npxCmd, ["prisma", "generate"], {
+            cwd: dir, stdio: "inherit", windowsHide: true, shell: process.platform === "win32",
+        });
+        if (gen.status !== 0) {
+            return {
+                error: "prisma-generate-failed",
+                message: `prisma generate failed (exit ${gen.status}). Try manually in ${dir}: ${npxCmd} prisma generate`,
+            };
+        }
+        log?.(`[kronos] $ ${npxCmd} prisma db push --accept-data-loss  (in ${dir})`);
+        const push = spawnSync(npxCmd, ["prisma", "db", "push", "--accept-data-loss"], {
+            cwd: dir, stdio: "inherit", windowsHide: true, shell: process.platform === "win32",
+        });
+        if (push.status !== 0) {
+            return {
+                error: "prisma-push-failed",
+                message: `prisma db push failed (exit ${push.status}). Try manually in ${dir}: ${npxCmd} prisma db push --accept-data-loss`,
+            };
+        }
+    }
+
+    return { dir: path.resolve(dir), reused: alreadyThere };
+}
+
+// Interactive wrapper used by up/serve/setup when no checkout is found:
+// prompts the user, then bootstraps. Returns the checkout dir or null.
+// opts:
+//   log      — logger
+//   noPrompt — when true (e.g. --no-bootstrap), never prompt; return null
+async function maybeBootstrapCheckoutInteractive({ log, noPrompt } = {}) {
+    const out = (m) => (log ? log(m) : console.log(m));
+    if (noPrompt) return null;
+    // Skip prompt entirely if not a TTY (piped install) — fail loudly instead of hanging.
+    if (!process.stdin.isTTY && !process.env.KRONOS_BOOTSTRAP) {
+        out?.(`[kronos] No checkout found and stdin is not interactive. Run \`kronos init\` once to bootstrap the dashboard source.`);
+        return null;
+    }
+    let prompts;
+    try {
+        prompts = await loadPrompts();
+    } catch (e) {
+        out?.(`[kronos] ${e.message}`);
+        return null;
+    }
+    const answer = await prompts.confirm({
+        message: "No Kronos source checkout found. Bootstrap the dashboard now? (clones the repo, installs deps, sets up SQLite)",
+        initialValue: true,
+    });
+    if (prompts.isCancel(answer) || !answer) {
+        out?.(`[kronos] Skipped. Run \`kronos init\` later, or use \`kronos agent --server <url>\` for worker-only mode.`);
+        return null;
+    }
+    const s = prompts.spinner();
+    if (s?.start) s.start("Bootstrapping Kronos dashboard");
+    try {
+        const res = await bootstrapCheckout({ log: (m) => { if (s?.message) s.message(m.replace(/^\[kronos\]\s*/, "")); else out?.(m); } });
+        if (res.error) {
+            if (s?.stop) s.stop(res.message.split("\n")[0]);
+            out?.(`[kronos] ${res.message}`);
+            return null;
+        }
+        if (s?.stop) s.stop("Dashboard ready");
+        out?.(`[kronos] Bootstrap complete → ${res.dir}`);
+        return res.dir;
+    } catch (e) {
+        if (s?.stop) s.stop("Bootstrap failed");
+        out?.(`[kronos] Bootstrap failed: ${e.message}`);
+        return null;
+    }
+}
+
+async function commandInit(rawArgs) {
+    const args = parseArgs(rawArgs);
+    if (args.help || args.h) {
+        console.log(`kronos init
+
+Bootstrap a local copy of the Kronos source tree so \`up\`/\`serve\`/\`setup\` can
+spawn the Next.js dashboard server. Clones the repo (shallow), installs deps, and
+sets up the SQLite database via Prisma. Idempotent — safe to re-run.
+
+\`\`\`
+$ kronos init                      # -> ~/.kronos/checkout
+$ KRONOS_CHECKOUT_DIR=/path kronos init
+$ kronos init --no-install         # clone only, skip npm i + prisma step
+\`\`\`
+
+Env:
+  KRONOS_CHECKOUT_DIR  override clone destination (default ~/.kronos/checkout)
+  KRONOS_REPO_URL      override git URL (default ${DEFAULT_REPO_URL})
+`);
+        return;
+    }
+    const dir = args.dir || defaultCheckoutDir();
+    console.log(`[kronos] Bootstrapping Kronos dashboard source...`);
+    const res = await bootstrapCheckout({ dir, noInstall: args["no-install"] || false });
+    if (res.error) {
+        console.error(`[kronos] ${res.message}`);
+        process.exitCode = 1;
+        return;
+    }
+    console.log(`[kronos] OK. Checkout ready at: ${res.dir}`);
+    console.log(`[kronos] Next: kronos up --alias <alias> --verbose`);
 }
 
 async function isServerReachable(serverUrl) {
@@ -1053,11 +1323,33 @@ async function ensureServerRunning({ server, log, mode = "prod", pollMs = 1500, 
 
     const checkout = findKronosCheckout();
     if (!checkout) {
+        // Try interactive bootstrap (clones repo + npm i + prisma), unless disabled.
+        const noBootstrap = !!process.env.KRONOS_NO_BOOTSTRAP;
+        if (!noBootstrap) {
+            const bootstrapped = await maybeBootstrapCheckoutInteractive({ log });
+            if (bootstrapped) {
+                // Re-run with the newly-cloned checkout. Set cwd so finders pick it up too.
+                try { process.chdir(bootstrapped); } catch { /* ignore */ }
+                return ensureServerRunning({ server, log, mode, pollMs, timeoutMs });
+            }
+        }
         return {
             spawned: false,
             alreadyRunning: false,
             error: "no-checkout",
-            message: "No Kronos checkout found. Place the kronos CLI in a folder with package.json (name=\"kronos\") or set KRONOS_INSTALL_DIR.",
+            message:
+                "No Kronos checkout found. The `up`/`serve`/`setup` commands bootstrap the " +
+                "Next.js dashboard server, which needs the Kronos source tree.\n\n" +
+                "  Pick one:\n" +
+                "  1) `kronos init` — auto-clones the repo, installs deps, sets up SQLite:\n" +
+                "       kronos init && kronos up --alias <alias>\n" +
+                "     (requires `git` + `bun` or `npm` on PATH)\n\n" +
+                "  2) Clone manually and run from inside it:\n" +
+                "       git clone https://github.com/Reqeique/Kronos.git && cd Kronos\n" +
+                "       npm i && npm run db:push && npm run dev\n\n" +
+                "  3) Just run the agent/worker against an already-running server (no checkout needed):\n" +
+                "       kronos agent --server <url> --token <token> --alias <alias>\n\n" +
+                "  (You can also set KRONOS_INSTALL_DIR or KRONOS_CHECKOUT_DIR to point at a checkout.)",
         };
     }
 
@@ -2303,8 +2595,18 @@ async function main() {
         return;
     }
 
+    if (command === "--version" || command === "-V" || command === "version") {
+        console.log(`kronos ${VERSION}`);
+        return;
+    }
+
     if (command === "setup") {
         await commandSetup(rawArgs);
+        return;
+    }
+
+    if (command === "init") {
+        await commandInit(rawArgs);
         return;
     }
 

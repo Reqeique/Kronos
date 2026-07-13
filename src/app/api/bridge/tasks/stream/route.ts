@@ -88,16 +88,6 @@ export async function GET(req: NextRequest) {
                 sendTask(task);
             });
 
-            // Polling fallback for production worker isolation (see tasks/route.ts)
-            const duePollInterval = setInterval(async () => {
-                try {
-                    const task = await findDispatchedTaskForAlias(bridge.userId, alias);
-                    sendTask(task);
-                } catch {
-                    // Ignore transient errors in poll
-                }
-            }, 5_000);
-
             const keepAlive = setInterval(() => {
                 try {
                     controller.enqueue(encoder.encode(": ping\n\n"));
@@ -106,9 +96,11 @@ export async function GET(req: NextRequest) {
                 }
             }, 30_000);
 
+            // Push delivery is handled by eventBus (anchored to globalThis
+            // via Symbol.for so all Next.js bundles share one EventEmitter).
+            // See src/lib/eventBus.ts.
             cleanup = () => {
                 unsubscribe();
-                clearInterval(duePollInterval);
                 clearInterval(keepAlive);
             };
         },
