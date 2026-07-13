@@ -934,6 +934,14 @@ function findKronosCheckout() {
         if (isKronosCheckout(env)) return env;
     }
 
+    if (process.env.KRONOS_CHECKOUT_DIR) {
+        const env = path.resolve(process.env.KRONOS_CHECKOUT_DIR);
+        if (isKronosCheckout(env)) return env;
+    }
+
+    const defaultCheckout = defaultCheckoutDir();
+    if (isKronosCheckout(defaultCheckout)) return defaultCheckout;
+
     const argv1 = process.argv[1] || "";
     const binDir = argv1 ? path.dirname(path.resolve(argv1)) : "";
     if (binDir) {
